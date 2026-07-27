@@ -2,6 +2,7 @@
   "id": "frame06",
   "name": "Caption",
   "order": 6,
+  "preview": "/frames/frame06/preview.png",
   "variants": {
     "post": {
       "canvas": {

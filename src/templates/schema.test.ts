@@ -22,6 +22,7 @@ function validTemplate() {
     id: "frame01",
     name: "Duo",
     order: 1,
+    preview: "/frames/frame01/preview.png",
     variants: { post: variant, story: structuredClone(variant) },
   };
 }

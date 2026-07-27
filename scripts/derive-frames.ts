@@ -202,11 +202,25 @@ function deriveVariant(
   };
 }
 
+/** 사용 예시 시안(SampleNN) → ¼ 축소 카드 미리보기 (스펙 02) */
+function derivePreview(config: FrameConfig): string {
+  const sample = readPng(
+    path.join(DESIGN_DIR, `Sample${config.id.slice(-2)}.png`),
+  );
+  const preview = downscaleHalf(downscaleHalf(sample));
+  const outDir = path.join(PUBLIC_DIR, config.id);
+  mkdirSync(outDir, { recursive: true });
+  writePng(path.join(outDir, "preview.png"), preview);
+  console.log(`${config.id}/preview: ${preview.width}×${preview.height} 생성`);
+  return `/frames/${config.id}/preview.png`;
+}
+
 for (const config of FRAME_CONFIGS) {
   const template: FrameTemplate = {
     id: config.id,
     name: config.name,
     order: config.order,
+    preview: derivePreview(config),
     variants: {
       post: deriveVariant(config, "post", "post"),
       story: deriveVariant(config, "story", "story"),

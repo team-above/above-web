@@ -2,6 +2,7 @@
   "id": "frame02",
   "name": "Punching",
   "order": 2,
+  "preview": "/frames/frame02/preview.png",
   "variants": {
     "post": {
       "canvas": {

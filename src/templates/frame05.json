@@ -2,6 +2,7 @@
   "id": "frame05",
   "name": "Doodle",
   "order": 5,
+  "preview": "/frames/frame05/preview.png",
   "variants": {
     "post": {
       "canvas": {

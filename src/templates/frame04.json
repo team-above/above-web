@@ -2,6 +2,7 @@
   "id": "frame04",
   "name": "Weekly Dump",
   "order": 4,
+  "preview": "/frames/frame04/preview.png",
   "variants": {
     "post": {
       "canvas": {

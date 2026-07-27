@@ -2,6 +2,7 @@
   "id": "frame03",
   "name": "Accent",
   "order": 3,
+  "preview": "/frames/frame03/preview.png",
   "variants": {
     "post": {
       "canvas": {

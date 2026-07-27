@@ -40,6 +40,8 @@ export interface FrameTemplate {
   id: string;
   name: string;
   order: number;
+  /** 홈 카드 미리보기 (사용 예시 시안 축소본) */
+  preview: string;
   variants: Record<VariantId, TemplateVariant>;
 }
 
@@ -138,6 +140,9 @@ export function validateTemplate(data: unknown): FrameTemplate {
   if (typeof data.name !== "string" || data.name.length === 0)
     fail(id, "name 필요");
   if (typeof data.order !== "number") fail(id, "order 필요");
+  if (typeof data.preview !== "string" || data.preview.length === 0) {
+    fail(id, "preview 경로 필요");
+  }
   if (!isRecord(data.variants)) fail(id, "variants 필요");
   for (const variantId of ["post", "story"] as const) {
     validateVariant(id, variantId, data.variants[variantId]);
