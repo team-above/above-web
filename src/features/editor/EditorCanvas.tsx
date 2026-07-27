@@ -17,18 +17,25 @@ import type { FrameTemplate, TemplatePlacement } from "@/templates/schema";
 import { clampTransform, initialTransform, zoomAt } from "./transform";
 import { useImageElement } from "./use-image";
 
+/** 내보내기 함수 시그니처 — 메인 레이어를 캔버스 좌표계 네이티브 해상도로 래스터화 (스펙 04) */
+export type ExportFn = () => HTMLCanvasElement | null;
+
 interface EditorCanvasProps {
   template: FrameTemplate;
   /** 슬롯 탭(빈 슬롯 추가·재탭 교체 공통) → 파일 선택 트리거 */
   onSlotTap: (slotId: string) => void;
+  /** EditorShell이 다운로드 시 호출할 내보내기 함수를 여기 담아준다 */
+  exportRef: React.MutableRefObject<ExportFn | null>;
 }
 
 export default function EditorCanvas({
   template,
   onSlotTap,
+  exportRef,
 }: EditorCanvasProps) {
   const variant = useEditorStore((s) => s.variant);
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<Konva.Stage>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -49,6 +56,29 @@ export default function EditorCanvas({
       ? fitToViewport(variant, viewport)
       : null;
 
+  // 내보내기: 스테이지를 잠시 1:1 크기로 되돌려 메인 레이어만 래스터화 (UI 배지 레이어 제외)
+  useEffect(() => {
+    exportRef.current = () => {
+      const stage = stageRef.current;
+      if (!stage) return null;
+      const prev = {
+        scale: stage.scaleX(),
+        width: stage.width(),
+        height: stage.height(),
+      };
+      stage.scale({ x: 1, y: 1 });
+      stage.size(variantData.canvas);
+      const canvas = stage.getLayers()[0].toCanvas();
+      stage.scale({ x: prev.scale, y: prev.scale });
+      stage.size({ width: prev.width, height: prev.height });
+      stage.batchDraw();
+      return canvas;
+    };
+    return () => {
+      exportRef.current = null;
+    };
+  }, [exportRef, variantData]);
+
   return (
     <div
       ref={containerRef}
@@ -58,6 +88,7 @@ export default function EditorCanvas({
     >
       {fitted && base && (
         <Stage
+          ref={stageRef}
           width={fitted.width}
           height={fitted.height}
           scaleX={fitted.scale}

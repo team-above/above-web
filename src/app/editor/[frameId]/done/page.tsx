@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
-import { EditorShell } from "@/features/editor/EditorShell";
+import { DonePanel } from "@/features/editor/DonePanel";
 import { getTemplate, templates } from "@/templates";
 
 export function generateStaticParams() {
   return templates.map((template) => ({ frameId: template.id }));
 }
 
-export default async function EditorPage({
+export default async function DonePage({
   params,
 }: {
   params: Promise<{ frameId: string }>;
@@ -16,8 +16,8 @@ export default async function EditorPage({
   if (!template) notFound();
 
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-135 flex-col px-4 pt-4">
-      <EditorShell template={template} />
+    <main className="mx-auto flex h-dvh w-full max-w-135 flex-col px-6 py-6">
+      <DonePanel template={template} />
     </main>
   );
 }

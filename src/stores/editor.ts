@@ -17,6 +17,8 @@ interface EditorState {
   variant: VariantId;
   photos: Record<string, SlotPhoto>;
   transforms: Record<VariantId, Record<string, PhotoTransform>>;
+  /** 마지막 내보내기 결과 objectURL — done 화면 미리보기용 (스펙 04) */
+  exportUrl: string | null;
   /** 템플릿 진입 시 호출 — 다른 템플릿이면 전체 초기화 */
   enterTemplate: (templateId: string) => void;
   setVariant: (variant: VariantId) => void;
@@ -26,6 +28,13 @@ interface EditorState {
     slotId: string,
     transform: PhotoTransform,
   ) => void;
+  setExportUrl: (url: string) => void;
+}
+
+function revokeUrl(url: string | null) {
+  if (url && typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(url);
+  }
 }
 
 const emptyTransforms = (): EditorState["transforms"] => ({
@@ -38,18 +47,21 @@ export const useEditorStore = create<EditorState>((set) => ({
   variant: "post",
   photos: {},
   transforms: emptyTransforms(),
+  exportUrl: null,
   enterTemplate: (templateId) =>
     set((state) => {
       if (state.templateId === templateId) return state;
-      // 이전 템플릿의 비트맵 메모리 반환
+      // 이전 템플릿의 비트맵·내보내기 URL 메모리 반환
       for (const photo of Object.values(state.photos)) {
         photo.bitmap.close?.();
       }
+      revokeUrl(state.exportUrl);
       return {
         templateId,
         variant: "post",
         photos: {},
         transforms: emptyTransforms(),
+        exportUrl: null,
       };
     }),
   setVariant: (variant) => set({ variant }),
@@ -72,6 +84,11 @@ export const useEditorStore = create<EditorState>((set) => ({
         [variant]: { ...state.transforms[variant], [slotId]: transform },
       },
     })),
+  setExportUrl: (url) =>
+    set((state) => {
+      revokeUrl(state.exportUrl);
+      return { exportUrl: url };
+    }),
 }));
 
 function omit<T>(record: Record<string, T>, key: string): Record<string, T> {

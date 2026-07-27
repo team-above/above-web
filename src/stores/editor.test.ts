@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useEditorStore } from "./editor";
 
 const fakeBitmap = (name: string) =>
@@ -31,6 +31,19 @@ describe("editor 스토어", () => {
     expect(state.photos.left.fileName).toBe("a.jpg");
     expect(state.transforms.post.left).toEqual({ x: -10, y: 0, scale: 1.5 });
     expect(state.transforms.story.left).toEqual({ x: -99, y: -5, scale: 2 });
+  });
+
+  it("내보내기 URL 교체·템플릿 전환 시 이전 objectURL을 revoke한다", () => {
+    const revoke = vi.fn();
+    vi.stubGlobal("URL", { ...URL, revokeObjectURL: revoke });
+    const store = useEditorStore.getState();
+    store.setExportUrl("blob:one");
+    store.setExportUrl("blob:two");
+    expect(revoke).toHaveBeenCalledWith("blob:one");
+    useEditorStore.getState().enterTemplate("frame03");
+    expect(revoke).toHaveBeenCalledWith("blob:two");
+    expect(useEditorStore.getState().exportUrl).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("사진 교체 시 해당 슬롯의 양쪽 비율 조정값을 초기화한다", () => {

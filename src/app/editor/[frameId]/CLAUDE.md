@@ -1,6 +1,7 @@
 # /editor/[frameId] (에디터)
 
-스펙: docs/specs/03-editor.md (Implemented). 다운로드는 스펙 04에서 (헤더 버튼 자리만 있음).
+스펙: docs/specs/03-editor.md (Implemented) + 04-export.md (Implemented — 헤더 다운로드 버튼,
+EditorShell이 헤더 포함 전체 UI 담당. 완료 화면은 done/ 하위 라우트).
 
 - frameId는 `getTemplate()`으로 검증, 미존재 시 `notFound()`
 - 이 라우트의 페이지뷰가 "템플릿별 편집 사용" 지표다 (PRD §2) — 라우트 구조 바꿀 때 주의.
