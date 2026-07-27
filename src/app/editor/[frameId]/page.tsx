@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EditorShell } from "@/features/editor/EditorShell";
 import { getTemplate, templates } from "@/templates";
 
 export function generateStaticParams() {
   return templates.map((template) => ({ frameId: template.id }));
 }
 
-// 에디터 본 구현은 스펙 03에서 — 지금은 라우팅 구조(템플릿별 페이지뷰 집계 포함)만 잡는다
 export default async function EditorPage({
   params,
 }: {
@@ -17,12 +17,23 @@ export default async function EditorPage({
   if (!template) notFound();
 
   return (
-    <main className="mx-auto flex w-full max-w-135 flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-      <h1 className="text-2xl font-bold">{template.name}</h1>
-      <p className="text-sm text-neutral-500">에디터를 준비하고 있어요</p>
-      <Link href="/" className="mt-4 text-sm font-medium underline">
-        템플릿 목록으로 돌아가기
-      </Link>
+    <main className="mx-auto flex h-dvh w-full max-w-135 flex-col px-4 pt-4">
+      <header className="flex items-center justify-between pb-4">
+        <Link href="/" className="text-sm font-medium">
+          ‹ Home
+        </Link>
+        <h1 className="font-bold">{template.name}</h1>
+        {/* 다운로드는 스펙 04 — 자리만 잡아둔다 */}
+        <button
+          type="button"
+          disabled
+          aria-label="다운로드 (준비 중)"
+          className="text-sm text-neutral-300"
+        >
+          ↓
+        </button>
+      </header>
+      <EditorShell template={template} />
     </main>
   );
 }
