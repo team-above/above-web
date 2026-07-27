@@ -1,0 +1,95 @@
+{
+  "id": "frame01",
+  "name": "Duo",
+  "order": 1,
+  "variants": {
+    "post": {
+      "canvas": {
+        "width": 1080,
+        "height": 1350
+      },
+      "assets": {
+        "base": "/frames/frame01/post/base.png",
+        "overlay": "/frames/frame01/post/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "left",
+          "label": "왼쪽 사진"
+        },
+        {
+          "id": "right",
+          "label": "오른쪽 사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "left",
+          "rect": {
+            "x": 312,
+            "y": 537,
+            "width": 206,
+            "height": 276
+          },
+          "mask": "/frames/frame01/post/mask-left.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "right",
+          "rect": {
+            "x": 562,
+            "y": 537,
+            "width": 206,
+            "height": 276
+          },
+          "mask": "/frames/frame01/post/mask-right.png",
+          "fit": "cover"
+        }
+      ]
+    },
+    "story": {
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "assets": {
+        "base": "/frames/frame01/story/base.png",
+        "overlay": "/frames/frame01/story/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "left",
+          "label": "왼쪽 사진"
+        },
+        {
+          "id": "right",
+          "label": "오른쪽 사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "left",
+          "rect": {
+            "x": 279,
+            "y": 800,
+            "width": 238,
+            "height": 320
+          },
+          "mask": "/frames/frame01/story/mask-left.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "right",
+          "rect": {
+            "x": 563,
+            "y": 800,
+            "width": 238,
+            "height": 320
+          },
+          "mask": "/frames/frame01/story/mask-right.png",
+          "fit": "cover"
+        }
+      ]
+    }
+  }
+}

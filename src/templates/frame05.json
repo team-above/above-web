@@ -1,0 +1,65 @@
+{
+  "id": "frame05",
+  "name": "Doodle",
+  "order": 5,
+  "variants": {
+    "post": {
+      "canvas": {
+        "width": 1080,
+        "height": 1350
+      },
+      "assets": {
+        "base": "/frames/frame05/post/base.png",
+        "overlay": "/frames/frame05/post/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "main",
+          "label": "사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "main",
+          "rect": {
+            "x": 259,
+            "y": 301,
+            "width": 562,
+            "height": 748
+          },
+          "mask": "/frames/frame05/post/mask-main.png",
+          "fit": "cover"
+        }
+      ]
+    },
+    "story": {
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "assets": {
+        "base": "/frames/frame05/story/base.png",
+        "overlay": "/frames/frame05/story/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "main",
+          "label": "사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "main",
+          "rect": {
+            "x": 259,
+            "y": 586,
+            "width": 562,
+            "height": 748
+          },
+          "mask": "/frames/frame05/story/mask-main.png",
+          "fit": "cover"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,245 @@
+{
+  "id": "frame04",
+  "name": "Weekly Dump",
+  "order": 4,
+  "variants": {
+    "post": {
+      "canvas": {
+        "width": 1080,
+        "height": 1350
+      },
+      "assets": {
+        "base": "/frames/frame04/post/base.png",
+        "overlay": "/frames/frame04/post/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "mon",
+          "label": "Mon"
+        },
+        {
+          "id": "tue",
+          "label": "Tue"
+        },
+        {
+          "id": "wed",
+          "label": "Wed"
+        },
+        {
+          "id": "thu",
+          "label": "Thu"
+        },
+        {
+          "id": "fri",
+          "label": "Fri"
+        },
+        {
+          "id": "sat",
+          "label": "Sat"
+        },
+        {
+          "id": "sun",
+          "label": "Sun"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "mon",
+          "rect": {
+            "x": 60,
+            "y": 481,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/post/mask-mon.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "tue",
+          "rect": {
+            "x": 302,
+            "y": 481,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/post/mask-tue.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "wed",
+          "rect": {
+            "x": 544,
+            "y": 481,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/post/mask-wed.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "thu",
+          "rect": {
+            "x": 786,
+            "y": 481,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/post/mask-thu.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "fri",
+          "rect": {
+            "x": 182,
+            "y": 729,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/post/mask-fri.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "sat",
+          "rect": {
+            "x": 424,
+            "y": 729,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/post/mask-sat.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "sun",
+          "rect": {
+            "x": 666,
+            "y": 729,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/post/mask-sun.png",
+          "fit": "cover"
+        }
+      ]
+    },
+    "story": {
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "assets": {
+        "base": "/frames/frame04/story/base.png",
+        "overlay": "/frames/frame04/story/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "mon",
+          "label": "Mon"
+        },
+        {
+          "id": "tue",
+          "label": "Tue"
+        },
+        {
+          "id": "wed",
+          "label": "Wed"
+        },
+        {
+          "id": "thu",
+          "label": "Thu"
+        },
+        {
+          "id": "fri",
+          "label": "Fri"
+        },
+        {
+          "id": "sat",
+          "label": "Sat"
+        },
+        {
+          "id": "sun",
+          "label": "Sun"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "mon",
+          "rect": {
+            "x": 60,
+            "y": 766,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/story/mask-mon.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "tue",
+          "rect": {
+            "x": 302,
+            "y": 766,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/story/mask-tue.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "wed",
+          "rect": {
+            "x": 544,
+            "y": 766,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/story/mask-wed.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "thu",
+          "rect": {
+            "x": 786,
+            "y": 766,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/story/mask-thu.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "fri",
+          "rect": {
+            "x": 182,
+            "y": 1014,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/story/mask-fri.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "sat",
+          "rect": {
+            "x": 424,
+            "y": 1014,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/story/mask-sat.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "sun",
+          "rect": {
+            "x": 666,
+            "y": 1014,
+            "width": 232,
+            "height": 233
+          },
+          "mask": "/frames/frame04/story/mask-sun.png",
+          "fit": "cover"
+        }
+      ]
+    }
+  }
+}

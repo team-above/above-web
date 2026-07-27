@@ -1,0 +1,95 @@
+{
+  "id": "frame03",
+  "name": "Accent",
+  "order": 3,
+  "variants": {
+    "post": {
+      "canvas": {
+        "width": 1080,
+        "height": 1350
+      },
+      "assets": {
+        "base": "/frames/frame03/post/base.png",
+        "overlay": "/frames/frame03/post/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "top",
+          "label": "위 사진"
+        },
+        {
+          "id": "bottom",
+          "label": "아래 사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "top",
+          "rect": {
+            "x": 340,
+            "y": 141,
+            "width": 400,
+            "height": 299
+          },
+          "mask": "/frames/frame03/post/mask-top.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "bottom",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 1080,
+            "height": 770
+          },
+          "mask": "/frames/frame03/post/mask-bottom.png",
+          "fit": "cover"
+        }
+      ]
+    },
+    "story": {
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "assets": {
+        "base": "/frames/frame03/story/base.png",
+        "overlay": "/frames/frame03/story/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "top",
+          "label": "위 사진"
+        },
+        {
+          "id": "bottom",
+          "label": "아래 사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "top",
+          "rect": {
+            "x": 340,
+            "y": 141,
+            "width": 400,
+            "height": 299
+          },
+          "mask": "/frames/frame03/story/mask-top.png",
+          "fit": "cover"
+        },
+        {
+          "slot": "bottom",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 1080,
+            "height": 1340
+          },
+          "mask": "/frames/frame03/story/mask-bottom.png",
+          "fit": "cover"
+        }
+      ]
+    }
+  }
+}

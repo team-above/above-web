@@ -1,0 +1,65 @@
+{
+  "id": "frame06",
+  "name": "Caption",
+  "order": 6,
+  "variants": {
+    "post": {
+      "canvas": {
+        "width": 1080,
+        "height": 1350
+      },
+      "assets": {
+        "base": "/frames/frame06/post/base.png",
+        "overlay": "/frames/frame06/post/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "main",
+          "label": "사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "main",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 400
+          },
+          "mask": "/frames/frame06/post/mask-main.png",
+          "fit": "cover"
+        }
+      ]
+    },
+    "story": {
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "assets": {
+        "base": "/frames/frame06/story/base.png",
+        "overlay": "/frames/frame06/story/overlay.png"
+      },
+      "slots": [
+        {
+          "id": "main",
+          "label": "사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "main",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 500
+          },
+          "mask": "/frames/frame06/story/mask-main.png",
+          "fit": "cover"
+        }
+      ]
+    }
+  }
+}
