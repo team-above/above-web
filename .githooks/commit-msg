@@ -1,0 +1,13 @@
+#!/bin/sh
+# Claude를 기여자로 남기는 트레일러/문구 차단
+msg_file="$1"
+
+if grep -qiE 'co-authored-by:.*(claude|anthropic)' "$msg_file"; then
+  echo "commit-msg 훅: Co-Authored-By에 Claude/Anthropic을 넣을 수 없습니다." >&2
+  exit 1
+fi
+
+if grep -qiE 'generated with.*claude' "$msg_file"; then
+  echo "commit-msg 훅: 'Generated with Claude Code' 문구를 커밋 메시지에 넣을 수 없습니다." >&2
+  exit 1
+fi
