@@ -557,6 +557,103 @@ test("비율 전환 시 사진이 유지된다", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유, 스펙 06)", async ({
+  page,
+}) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  // 좌 빨강/우 파랑 사진 — 기본(중앙)은 경계, 오른쪽 드래그로 빨강을 중앙에 둔다
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 300, center.y, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return p.r - p.b;
+    })
+    .toBeGreaterThan(100);
+
+  // story에서도 같은 지점(빨강)이 슬롯 중앙에 온다 — 초점이 사진 속성으로 공유되므로
+  await page.getByRole("button", { name: "Story 9:16" }).click();
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(
+        page,
+        await placementCenter(page, frame01, "story", "left"),
+      );
+      return p.r - p.b;
+    })
+    .toBeGreaterThan(100);
+
+  // post로 복귀해도 그대로
+  await page.getByRole("button", { name: "Post 4:5" }).click();
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(
+        page,
+        await placementCenter(page, frame01, "post", "left"),
+      );
+      return p.r - p.b;
+    })
+    .toBeGreaterThan(100);
+});
+
+test("터치 탭으로 ✕ 해제·📷 교체가 동작한다 (스펙 06)", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "mobile-chrome",
+    "실기기 회귀 방지 — 터치 이벤트 경로는 모바일 프로젝트에서 검증",
+  );
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.touchscreen.tap(center.x, center.y);
+  await (await chooserPromise).setFiles(FIXTURE); // 자동 선택
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  const buttons = await selectionButtons(page);
+  const { rect } = frame01.variants.post.placements[0];
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const scale = box.width / frame01.variants.post.canvas.width;
+  const probe = {
+    x: box.x + (rect.x + 4) * scale,
+    y: box.y + (rect.y + rect.height / 2) * scale,
+  };
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeGreaterThan(40); // 선택 상태(고스트)
+
+  // 📷 터치 탭 → 파일 선택창 (탭 완료 시점 실행 — iOS user activation 경로)
+  const replacePromise = page.waitForEvent("filechooser");
+  await page.touchscreen.tap(buttons.camera.x, buttons.camera.y);
+  await (await replacePromise).setFiles(FIXTURE);
+
+  // ✕ 터치 탭 → 해제
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeGreaterThan(40);
+  await page.touchscreen.tap(buttons.close.x, buttons.close.y);
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeLessThan(10);
+
+  // 사진 터치 탭 → 재선택 (토글)
+  await page.touchscreen.tap(center.x, center.y);
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeGreaterThan(40);
+});
+
 test("드래그를 이웃 슬롯 위에서 놓아도 파일 선택창이 열리지 않는다", async ({
   page,
 }) => {

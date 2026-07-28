@@ -17,8 +17,11 @@ export interface PhotoTransform {
   rotation: number;
 }
 
-/** 비율별로 독립 저장되는 오프셋 — 회전·줌은 사진 속성으로 비율 간 공유된다 (스펙 06) */
-export interface SlotOffset {
+/**
+ * 슬롯 중앙에 오는 사진 지점(초점) — 사진 중심 기준, 무회전 사진 축, 사진 px 단위.
+ * 줌·회전과 함께 사진 속성으로 비율 간 공유되어, 비율을 전환해도 같은 부분이 보인다 (스펙 06).
+ */
+export interface FocalPoint {
   x: number;
   y: number;
 }
@@ -76,8 +79,9 @@ export function clampTransform(
   return {
     scale,
     rotation,
-    x: clampedX * cos - clampedY * sin,
-    y: clampedX * sin + clampedY * cos,
+    // +0: 음의 0 정규화 (-scale×0 합성 경로에서 -0이 새어 나오지 않게)
+    x: clampedX * cos - clampedY * sin + 0,
+    y: clampedX * sin + clampedY * cos + 0,
   };
 }
 
@@ -87,19 +91,37 @@ export function initialTransform(photo: Size, rect: Size): PhotoTransform {
 }
 
 /**
- * 비율별 오프셋(없으면 중앙) + 공유 줌·회전을 합성해 항상 클램프된 변환을 만든다.
- * 실제 배율 = minScale(θ, rect) × zoom — 비율 전환 시 각도·확대감이 그대로 유지된다 (스펙 06).
+ * 공유 초점(없으면 중앙)·줌·회전을 합성해 항상 클램프된 변환을 만든다.
+ * 실제 배율 = minScale(θ, rect) × zoom, 오프셋 = 초점이 슬롯 중앙에 오도록 역산 —
+ * 비율 전환 시 같은 부분·확대감·각도가 그대로 유지된다 (스펙 06).
+ * 슬롯 크기가 달라 초점을 정확히 지킬 수 없으면(사진 가장자리) 클램프가 최대한 근접시킨다.
  */
 export function composeTransform(
-  offset: SlotOffset | null,
+  focal: FocalPoint | null,
   zoom: number,
   rotation: number,
   photo: Size,
   rect: Size,
 ): PhotoTransform {
   const scale = minScaleFor(photo, rect, rotation) * Math.max(zoom, 1);
-  const base = offset ?? { x: 0, y: 0 };
-  return clampTransform({ ...base, scale, rotation }, photo, rect);
+  const f = focal ?? { x: 0, y: 0 };
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  // 사진 지점 p의 화면 위치 = offset + scale·R(θ)·p → 초점을 슬롯 중앙(0,0)에 두는 offset
+  const x = -scale * (f.x * cos - f.y * sin);
+  const y = -scale * (f.x * sin + f.y * cos);
+  return clampTransform({ x, y, scale, rotation }, photo, rect);
+}
+
+/** 변환에서 공유 초점을 역산한다 — 제스처 결과 저장용 (composeTransform과 왕복 일치) */
+export function toFocal(transform: PhotoTransform): FocalPoint {
+  const { x, y, scale, rotation } = transform;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  return {
+    x: (-x * cos - y * sin) / scale,
+    y: (x * sin - y * cos) / scale,
+  };
 }
 
 /** 변환에서 공유 줌(cover 대비 상대 배율)을 역산한다 — 제스처 결과 저장용 */

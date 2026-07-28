@@ -20,6 +20,7 @@ import {
   clampTransform,
   composeTransform,
   rotateTo,
+  toFocal,
   toZoom,
   zoomAt,
   type PhotoTransform,
@@ -39,7 +40,7 @@ interface EditorCanvasProps {
 }
 
 /**
- * 슬롯의 최신 합성 변환을 읽어 updater를 적용하고 오프셋(비율별)·줌·회전(공유)으로 분해 저장한다.
+ * 슬롯의 최신 합성 변환을 읽어 updater를 적용하고 초점·줌·회전(모두 비율 간 공유)으로 분해 저장한다.
  * 윈도우 리스너(클로저)에서도 안전하도록 항상 스토어에서 최신 상태를 읽는다.
  */
 function applySlotUpdate(
@@ -52,14 +53,14 @@ function applySlotUpdate(
   if (!photo) return;
   const size = { width: photo.bitmap.width, height: photo.bitmap.height };
   const current = composeTransform(
-    state.offsets[state.variant][slot] ?? null,
+    state.focals[slot] ?? null,
     state.zooms[slot] ?? 1,
     state.rotations[slot] ?? 0,
     size,
     rect,
   );
   const next = updater(current, size);
-  state.setOffset(state.variant, slot, { x: next.x, y: next.y });
+  state.setFocal(slot, toFocal(next));
   const zoom = toZoom(next, size, rect);
   if (zoom !== (state.zooms[slot] ?? 1)) state.setZoom(slot, zoom);
   if (next.rotation !== (state.rotations[slot] ?? 0)) {
@@ -137,10 +138,12 @@ export default function EditorCanvas({
               scaleY={fitted.scale}
             >
               <Layer>
-                {/* base가 배경 탭을 받아 선택 해제 (슬롯이 위에서 우선한다) */}
+                {/* base가 배경 탭을 받아 선택 해제 (슬롯이 위에서 우선한다).
+                    onTap은 iOS 실기기에서 pointer 이벤트가 유실될 때의 터치 폴백 */}
                 <KonvaImage
                   image={base}
                   onPointerDown={() => setSelectedSlot(null)}
+                  onTap={() => setSelectedSlot(null)}
                 />
                 {variantData.placements.map((placement) => (
                   <PlacementNode
@@ -184,14 +187,13 @@ export default function EditorCanvas({
 function GhostPhoto({ placement }: { placement: TemplatePlacement }) {
   const selected = useEditorStore((s) => s.selectedSlot === placement.slot);
   const photo = useEditorStore((s) => s.photos[placement.slot]);
-  const variant = useEditorStore((s) => s.variant);
-  const offset = useEditorStore((s) => s.offsets[variant][placement.slot]);
+  const focal = useEditorStore((s) => s.focals[placement.slot]);
   const rotation = useEditorStore((s) => s.rotations[placement.slot] ?? 0);
   const zoom = useEditorStore((s) => s.zooms[placement.slot] ?? 1);
   if (!selected || !photo) return null;
   const size = { width: photo.bitmap.width, height: photo.bitmap.height };
   const stored = composeTransform(
-    offset ?? null,
+    focal ?? null,
     zoom,
     rotation,
     size,
@@ -260,9 +262,8 @@ function PlacementNode({
   stageScale,
 }: PlacementNodeProps) {
   const { rect } = placement;
-  const variant = useEditorStore((s) => s.variant);
   const photo = useEditorStore((s) => s.photos[placement.slot]);
-  const offset = useEditorStore((s) => s.offsets[variant][placement.slot]);
+  const focal = useEditorStore((s) => s.focals[placement.slot]);
   const rotation = useEditorStore((s) => s.rotations[placement.slot] ?? 0);
   const zoom = useEditorStore((s) => s.zooms[placement.slot] ?? 1);
   const selected = useEditorStore((s) => s.selectedSlot === placement.slot);
@@ -274,9 +275,9 @@ function PlacementNode({
   const photoSize = photo
     ? { width: photo.bitmap.width, height: photo.bitmap.height }
     : null;
-  // 비율별 오프셋 + 공유 줌·회전 합성 — 오프셋이 없어도(비율 첫 진입) 항상 유효한 변환이 나온다
+  // 공유 초점·줌·회전 합성 — 초점이 없어도(첫 첨부) 항상 유효한 변환이 나온다
   const stored = photoSize
-    ? composeTransform(offset ?? null, zoom, rotation, photoSize, rect)
+    ? composeTransform(focal ?? null, zoom, rotation, photoSize, rect)
     : null;
 
   // 마스크 합성(destination-in)은 그룹 캐시 안에서만 적용되어야 레이어 전체를 지우지 않는다
@@ -516,6 +517,16 @@ function SelectionControls({
   const rotateSession = useRef<{ cleanup: () => void } | null>(null);
   useEffect(() => () => rotateSession.current?.cleanup(), []);
 
+  // 한 번의 물리 탭이 브라우저에 따라 click/tap/pointerclick 여러 konva 이벤트로 합성되므로
+  // (iOS는 pointer+touch+호환 mouse를 모두 발사) 짧은 창 안의 중복 실행을 막는다
+  const lastFire = useRef<Record<string, number>>({});
+  const once = (key: string, fn: () => void) => () => {
+    const now = Date.now();
+    if (now - (lastFire.current[key] ?? 0) < 400) return;
+    lastFire.current[key] = now;
+    fn();
+  };
+
   const placement = variantData.placements.find((p) => p.slot === selected);
   if (!placement || !photo || !selected) return null;
   const { rect } = placement;
@@ -533,27 +544,40 @@ function SelectionControls({
   const rotateX = clampX(rect.x + rect.width / 2);
   const rotateY = clampY(rect.y - px(32));
 
-  /** 궤도 회전 — 핸들을 잡고 슬롯 중심을 축으로 원을 그리듯 드래그 */
-  const startOrbit = (e: Konva.KonvaEventObject<PointerEvent>) => {
+  /**
+   * 궤도 회전 — 핸들을 잡고 슬롯 중심을 축으로 원을 그리듯 드래그.
+   * pointer/touch 양쪽에서 시작·추적한다 (iOS 실기기의 pointer 이벤트 유실 대비).
+   * 절대 각도 계산이라 두 경로가 겹쳐 와도 결과는 같다.
+   */
+  const startOrbit = (e: Konva.KonvaEventObject<PointerEvent | TouchEvent>) => {
     e.evt.preventDefault();
     e.cancelBubble = true;
+    if (rotateSession.current) return; // pointer·touch 중복 시작 방지
     const stage = groupRef.current?.getStage();
     const box = stage?.container().getBoundingClientRect();
     if (!box) return;
+    const startPoint =
+      "touches" in e.evt ? e.evt.touches[0] : (e.evt as PointerEvent);
+    if (!startPoint) return;
     const center = {
       x: box.left + (rect.x + rect.width / 2) * stageScale,
       y: box.top + (rect.y + rect.height / 2) * stageScale,
     };
     const startPointer = Math.atan2(
-      e.evt.clientY - center.y,
-      e.evt.clientX - center.x,
+      startPoint.clientY - center.y,
+      startPoint.clientX - center.x,
     );
     const startRotation = useEditorStore.getState().rotations[selected] ?? 0;
-    const onMove = (ev: PointerEvent) => {
-      const angle = Math.atan2(ev.clientY - center.y, ev.clientX - center.x);
+    const applyAngle = (clientX: number, clientY: number) => {
+      const angle = Math.atan2(clientY - center.y, clientX - center.x);
       applySlotUpdate(selected, rect, (current, size) =>
         rotateTo(current, startRotation + (angle - startPointer), size, rect),
       );
+    };
+    const onMove = (ev: PointerEvent) => applyAngle(ev.clientX, ev.clientY);
+    const onTouchMove = (ev: TouchEvent) => {
+      const t = ev.touches[0];
+      if (t) applyAngle(t.clientX, t.clientY);
     };
     const onUp = () => {
       rotateSession.current?.cleanup();
@@ -563,10 +587,16 @@ function SelectionControls({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onUp);
+      window.removeEventListener("touchcancel", onUp);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+    window.addEventListener("touchmove", onTouchMove);
+    window.addEventListener("touchend", onUp);
+    window.addEventListener("touchcancel", onUp);
     rotateSession.current = { cleanup };
   };
 
@@ -586,7 +616,8 @@ function SelectionControls({
         shadowBlur={px(4)}
         listening={false}
       />
-      {/* ✕ 해제 (우상단) */}
+      {/* ✕ 해제 (우상단) — 액션은 탭 완료 시점(click/tap/pointerclick)에.
+          누르는 순간(pointerdown)은 iOS 실기기에서 유실·경합이 있어 신뢰할 수 없다 */}
       <Group
         name="deselect-button"
         x={closeX}
@@ -594,18 +625,23 @@ function SelectionControls({
         onPointerDown={(e) => {
           e.evt.preventDefault();
           e.cancelBubble = true;
-          setSelectedSlot(null);
         }}
+        onClick={once("deselect", () => setSelectedSlot(null))}
+        onTap={once("deselect", () => setSelectedSlot(null))}
+        onPointerClick={once("deselect", () => setSelectedSlot(null))}
         onMouseEnter={() => {
           const c = groupRef.current?.getStage()?.container();
           if (c) c.style.cursor = "pointer";
         }}
       >
+        {/* 시각 16px, 터치 히트는 24px — 44pt급 타깃 확보 */}
+        <Circle radius={px(24)} fill="#000" opacity={0} />
         <Circle
           radius={px(16)}
           fill="#1c1c1e"
           shadowColor="rgba(0,0,0,0.3)"
           shadowBlur={px(4)}
+          listening={false}
         />
         <Line
           points={[-px(5), -px(5), px(5), px(5)]}
@@ -620,7 +656,8 @@ function SelectionControls({
           lineCap="round"
         />
       </Group>
-      {/* 📷 교체 (하단 중앙) */}
+      {/* 📷 교체 (슬롯 아래) — 탭 완료 시점에 실행해야 iOS가 파일 선택창을 허용한다
+          (터치의 user activation은 pointerup/touchend에 부여, pointerdown 시점엔 없음) */}
       <Group
         name="replace-button"
         x={cameraX}
@@ -628,18 +665,22 @@ function SelectionControls({
         onPointerDown={(e) => {
           e.evt.preventDefault();
           e.cancelBubble = true;
-          onReplace(selected);
         }}
+        onClick={once("replace", () => onReplace(selected))}
+        onTap={once("replace", () => onReplace(selected))}
+        onPointerClick={once("replace", () => onReplace(selected))}
         onMouseEnter={() => {
           const c = groupRef.current?.getStage()?.container();
           if (c) c.style.cursor = "pointer";
         }}
       >
+        <Circle radius={px(24)} fill="#000" opacity={0} />
         <Circle
           radius={px(18)}
           fill="#ffffff"
           shadowColor="rgba(0,0,0,0.25)"
           shadowBlur={px(5)}
+          listening={false}
         />
         {CAMERA_PATHS.map((data) => (
           <Path
@@ -656,22 +697,25 @@ function SelectionControls({
           />
         ))}
       </Group>
-      {/* ⟳ 궤도 회전 핸들 (상단 중앙) */}
+      {/* ⟳ 궤도 회전 핸들 (상단 중앙) — 드래그 시작이므로 down 시점 유지, touch 폴백 병행 */}
       <Group
         name="rotate-handle"
         x={rotateX}
         y={rotateY}
         onPointerDown={startOrbit}
+        onTouchStart={startOrbit}
         onMouseEnter={() => {
           const c = groupRef.current?.getStage()?.container();
           if (c) c.style.cursor = "grab";
         }}
       >
+        <Circle radius={px(24)} fill="#000" opacity={0} />
         <Circle
           radius={px(16)}
           fill="#ffffff"
           shadowColor="rgba(0,0,0,0.25)"
           shadowBlur={px(5)}
+          listening={false}
         />
         {ROTATE_PATHS.map((data) => (
           <Path

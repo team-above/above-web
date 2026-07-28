@@ -18,7 +18,7 @@ describe("editor 스토어", () => {
     const next = useEditorStore.getState();
     expect(next.photos).toEqual({});
     expect(next.variant).toBe("post");
-    expect(next.offsets).toEqual({ post: {}, story: {} });
+    expect(next.focals).toEqual({});
     expect(next.zooms).toEqual({});
     expect(next.selectedSlot).toBeNull();
   });
@@ -42,44 +42,34 @@ describe("editor 스토어", () => {
     expect(state.notice).toBeNull();
   });
 
-  it("회전·줌은 비율 간 공유되고, 사진 교체 시 초기화된다 (스펙 06)", () => {
+  it("초점·회전·줌은 비율 간 공유되고, 사진 교체 시 초기화된다 (스펙 06)", () => {
     const store = useEditorStore.getState();
     store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
+    store.setFocal("left", { x: 25, y: -10 });
     store.setRotation("left", 0.7);
     store.setZoom("left", 1.8);
     store.setVariant("story");
-    expect(useEditorStore.getState().rotations.left).toBe(0.7); // 전환에도 유지
-    expect(useEditorStore.getState().zooms.left).toBe(1.8);
+    const shared = useEditorStore.getState();
+    expect(shared.focals.left).toEqual({ x: 25, y: -10 }); // 전환에도 유지
+    expect(shared.rotations.left).toBe(0.7);
+    expect(shared.zooms.left).toBe(1.8);
     store.setPhoto("left", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
     const state = useEditorStore.getState();
+    expect(state.focals.left).toBeUndefined(); // 교체 시 중앙
     expect(state.rotations.left).toBeUndefined(); // 교체 시 무회전
     expect(state.zooms.left).toBeUndefined(); // 교체 시 cover
   });
 
-  it("오프셋은 비율별 독립 저장된다", () => {
+  it("사진 교체는 해당 슬롯의 편집 상태만 초기화한다 (다른 슬롯 불변)", () => {
     const store = useEditorStore.getState();
     store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    store.setOffset("post", "left", { x: -10, y: 0 });
-    store.setVariant("story");
-    store.setOffset("story", "left", { x: -99, y: -5 });
-    const state = useEditorStore.getState();
-    expect(state.photos.left.fileName).toBe("a.jpg");
-    expect(state.offsets.post.left).toEqual({ x: -10, y: 0 });
-    expect(state.offsets.story.left).toEqual({ x: -99, y: -5 });
-  });
-
-  it("사진 교체 시 해당 슬롯의 양쪽 비율 오프셋을 초기화한다", () => {
-    const store = useEditorStore.getState();
-    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    store.setOffset("post", "left", { x: -10, y: 0 });
-    store.setOffset("story", "left", { x: -20, y: 0 });
-    store.setOffset("post", "right", { x: -1, y: -1 });
+    store.setFocal("left", { x: -10, y: 0 });
+    store.setFocal("right", { x: -1, y: -1 });
     store.setPhoto("left", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
     const state = useEditorStore.getState();
     expect(state.photos.left.fileName).toBe("b.jpg");
-    expect(state.offsets.post.left).toBeUndefined();
-    expect(state.offsets.story.left).toBeUndefined();
-    expect(state.offsets.post.right).toEqual({ x: -1, y: -1 }); // 다른 슬롯 불변
+    expect(state.focals.left).toBeUndefined();
+    expect(state.focals.right).toEqual({ x: -1, y: -1 });
   });
 
   it("선택은 토글 가능하고 비율 전환 시 자동 해제된다 (스펙 06)", () => {

@@ -148,8 +148,8 @@ describe("snapAngle / rotateTo", () => {
   });
 });
 
-describe("composeTransform / toZoom", () => {
-  it("오프셋이 없으면 중앙, 배율 = minScale(θ)×zoom — 비율 전환 시 확대감 유지의 근거", async () => {
+describe("composeTransform / toFocal / toZoom", () => {
+  it("초점이 없으면 중앙, 배율 = minScale(θ)×zoom — 비율 전환 시 확대감 유지의 근거", async () => {
     const { composeTransform } = await import("./transform");
     expect(composeTransform(null, 1, 0, photo, rect)).toEqual({
       x: 0,
@@ -163,17 +163,31 @@ describe("composeTransform / toZoom", () => {
     expect(rotated.scale).toBeCloseTo(minScaleFor(photo, rect, 45 * DEG) * 1.5);
   });
 
-  it("zoom 1 미만은 cover로 방어하고, 오프셋은 클램프된다", async () => {
+  it("같은 초점은 슬롯이 달라도 같은 사진 지점을 중앙에 둔다 — post↔story 위치 유지의 근거", async () => {
+    const { composeTransform } = await import("./transform");
+    const focal = { x: 50, y: 0 }; // 사진 중심에서 오른쪽 50px 지점
+    const a = composeTransform(focal, 2, 0, photo, rect);
+    const b = composeTransform(focal, 2, 0, photo, { width: 150, height: 200 });
+    // 각 슬롯에서 초점의 화면 위치 = offset + scale·focal.x → 항상 슬롯 중앙(0)
+    expect(a.x + a.scale * focal.x).toBeCloseTo(0);
+    expect(b.x + b.scale * focal.x).toBeCloseTo(0);
+  });
+
+  it("zoom 1 미만은 cover로 방어하고, 빈틈이 생기는 초점은 클램프된다", async () => {
     const { composeTransform } = await import("./transform");
     const t = composeTransform({ x: 999, y: 0 }, 0.5, 0, photo, rect);
     expect(t.scale).toBe(1); // zoom<1 → cover
-    expect(t.x).toBe(100); // 가로 여유 한계로 클램프
+    expect(t.x).toBe(-100); // 오른쪽 끝 지점을 보려 해도 가로 여유 한계까지만 이동
   });
 
-  it("toZoom은 변환에서 공유 줌을 역산한다 (compose와 왕복 일치)", async () => {
-    const { composeTransform, toZoom } = await import("./transform");
-    const t = composeTransform(null, 1.8, 30 * DEG, photo, rect);
+  it("toFocal·toZoom은 변환에서 공유 상태를 역산한다 (compose와 왕복 일치)", async () => {
+    const { composeTransform, toFocal, toZoom } = await import("./transform");
+    const focal = { x: 30, y: -20 };
+    const t = composeTransform(focal, 1.8, 30 * DEG, photo, rect);
     expect(toZoom(t, photo, rect)).toBeCloseTo(1.8);
+    const back = toFocal(t);
+    expect(back.x).toBeCloseTo(focal.x);
+    expect(back.y).toBeCloseTo(focal.y);
   });
 });
 
