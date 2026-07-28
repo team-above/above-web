@@ -19,7 +19,7 @@ export default defineConfig({
         "src/app/**",
         "src/features/editor/EditorCanvas.tsx",
         "src/features/editor/EditorShell.tsx",
-        "src/features/editor/DonePanel.tsx",
+        "src/features/editor/DoneBeacon.tsx",
         "src/features/editor/use-image.ts",
       ],
       thresholds: {

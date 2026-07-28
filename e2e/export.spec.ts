@@ -64,7 +64,7 @@ const pixelOf = (png: PNG, x: number, y: number) => {
   return { r: png.data[idx], g: png.data[idx + 1], b: png.data[idx + 2] };
 };
 
-test("다운로드: 정확한 해상도 PNG + done 이동 + 상태 유지", async ({
+test("다운로드: 정확한 해상도 PNG + 집계 경유 후 에디터 복귀·토스트·상태 유지", async ({
   page,
 }) => {
   const errors = trackErrors(page);
@@ -94,12 +94,9 @@ test("다운로드: 정확한 해상도 PNG + done 이동 + 상태 유지", asyn
   expect(empty.r).toBeLessThan(230); // 배지(흰 원)가 섞였다면 235+
   expect(Math.abs(empty.r - empty.b)).toBeLessThan(12); // 무채색
 
-  // done 화면: 미리보기 + 보조 안내, 계속 편집 복귀 시 상태 유지
-  await expect(page).toHaveURL(/\/editor\/frame01\/done$/);
-  await expect(page.getByRole("heading", { name: "저장했어요" })).toBeVisible();
-  await expect(page.getByAltText(/미리보기/)).toBeVisible();
-  await page.getByRole("link", { name: "계속 편집" }).click();
+  // 결과 화면 없음(기획 확정): 집계 라우트(done)를 스쳐 에디터로 자동 복귀 + 토스트, 상태 유지
   await expect(page).toHaveURL(/\/editor\/frame01$/);
+  await expect(page.getByText("저장했어요")).toBeVisible();
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
   expect(errors).toEqual([]);
 });

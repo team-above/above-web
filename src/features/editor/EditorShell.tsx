@@ -23,7 +23,8 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
   const setVariant = useEditorStore((s) => s.setVariant);
   const enterTemplate = useEditorStore((s) => s.enterTemplate);
   const setPhoto = useEditorStore((s) => s.setPhoto);
-  const setExportUrl = useEditorStore((s) => s.setExportUrl);
+  const notice = useEditorStore((s) => s.notice);
+  const setNotice = useEditorStore((s) => s.setNotice);
   const exportable = useEditorStore((s) => canExport(s.photos));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +41,13 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
     const timer = setTimeout(() => setError(null), 3000);
     return () => clearTimeout(timer);
   }, [error]);
+
+  // 저장 완료 토스트 — done 라우트 왕복(리마운트) 후에도 보이도록 스토어 기반
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [notice, setNotice]);
 
   const handleSlotTap = (slotId: string) => {
     pendingSlotRef.current = slotId;
@@ -80,7 +88,10 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
       document.body.appendChild(anchor); // 일부 브라우저는 DOM 밖 앵커 클릭을 무시
       anchor.click();
       anchor.remove();
-      setExportUrl(url); // done 화면 미리보기용 — revoke는 스토어가 관리
+      // 다운로드 시작 후 여유를 두고 반환 (즉시 revoke하면 일부 브라우저에서 다운로드가 끊긴다)
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setNotice("저장했어요");
+      // 집계 전용 무화면 라우트 경유 — 페이지뷰만 남기고 즉시 에디터로 복귀 (스펙 04 변경)
       router.push(`/editor/${template.id}/done`);
     }, "image/png");
   };
@@ -178,9 +189,9 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
         }}
       />
 
-      {error && (
+      {(error ?? notice) && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-neutral-900/90 px-4 py-2 text-sm text-white">
-          {error}
+          {error ?? notice}
         </div>
       )}
     </div>

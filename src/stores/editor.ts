@@ -17,10 +17,10 @@ interface EditorState {
   variant: VariantId;
   photos: Record<string, SlotPhoto>;
   transforms: Record<VariantId, Record<string, PhotoTransform>>;
-  /** 마지막 내보내기 결과 objectURL — done 화면 미리보기용 (스펙 04) */
-  exportUrl: string | null;
   /** 지금 조작(드래그/핀치/휠) 중인 슬롯 — 슬롯 밖 고스트 표시용 */
   activeSlot: string | null;
+  /** 하단 토스트 안내 (예: 저장 완료) — 라우트 이동에도 유지되도록 스토어에 둔다 */
+  notice: string | null;
   /** 템플릿 진입 시 호출 — 다른 템플릿이면 전체 초기화 */
   enterTemplate: (templateId: string) => void;
   setVariant: (variant: VariantId) => void;
@@ -30,16 +30,10 @@ interface EditorState {
     slotId: string,
     transform: PhotoTransform,
   ) => void;
-  setExportUrl: (url: string) => void;
   setActiveSlot: (slotId: string | null) => void;
+  setNotice: (message: string | null) => void;
   /** 에디터를 떠날 때(홈 복귀) 호출 — 전체 초기화. 에디터↔done 왕복은 유지된다 */
   reset: () => void;
-}
-
-function revokeUrl(url: string | null) {
-  if (url && typeof URL.revokeObjectURL === "function") {
-    URL.revokeObjectURL(url);
-  }
 }
 
 const emptyTransforms = (): EditorState["transforms"] => ({
@@ -47,21 +41,17 @@ const emptyTransforms = (): EditorState["transforms"] => ({
   story: {},
 });
 
-/** 비트맵·objectURL 메모리를 반환하고 초기 상태 조각을 만든다 */
-function releaseAndClear(state: {
-  photos: Record<string, SlotPhoto>;
-  exportUrl: string | null;
-}) {
+/** 비트맵 메모리를 반환하고 초기 상태 조각을 만든다 */
+function releaseAndClear(state: { photos: Record<string, SlotPhoto> }) {
   for (const photo of Object.values(state.photos)) {
     photo.bitmap.close?.();
   }
-  revokeUrl(state.exportUrl);
   return {
     variant: "post" as const,
     photos: {},
     transforms: emptyTransforms(),
-    exportUrl: null,
     activeSlot: null,
+    notice: null,
   };
 }
 
@@ -70,8 +60,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   variant: "post",
   photos: {},
   transforms: emptyTransforms(),
-  exportUrl: null,
   activeSlot: null,
+  notice: null,
   enterTemplate: (templateId) =>
     set((state) =>
       state.templateId === templateId
@@ -81,6 +71,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   reset: () =>
     set((state) => ({ templateId: null, ...releaseAndClear(state) })),
   setActiveSlot: (slotId) => set({ activeSlot: slotId }),
+  setNotice: (message) => set({ notice: message }),
   setVariant: (variant) => set({ variant }),
   setPhoto: (slotId, photo) =>
     set((state) => {
@@ -101,11 +92,6 @@ export const useEditorStore = create<EditorState>((set) => ({
         [variant]: { ...state.transforms[variant], [slotId]: transform },
       },
     })),
-  setExportUrl: (url) =>
-    set((state) => {
-      revokeUrl(state.exportUrl);
-      return { exportUrl: url };
-    }),
 }));
 
 function omit<T>(record: Record<string, T>, key: string): Record<string, T> {

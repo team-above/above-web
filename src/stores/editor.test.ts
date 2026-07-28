@@ -49,7 +49,7 @@ describe("editor 스토어", () => {
     expect(state.photos).toEqual({});
     expect(state.variant).toBe("post");
     expect(state.activeSlot).toBeNull();
-    expect(state.exportUrl).toBeNull();
+    expect(state.notice).toBeNull();
   });
 
   it("activeSlot을 설정·해제한다 (고스트 표시 트리거)", () => {
@@ -57,19 +57,6 @@ describe("editor 스토어", () => {
     expect(useEditorStore.getState().activeSlot).toBe("left");
     useEditorStore.getState().setActiveSlot(null);
     expect(useEditorStore.getState().activeSlot).toBeNull();
-  });
-
-  it("내보내기 URL 교체·템플릿 전환 시 이전 objectURL을 revoke한다", () => {
-    const revoke = vi.fn();
-    vi.stubGlobal("URL", { ...URL, revokeObjectURL: revoke });
-    const store = useEditorStore.getState();
-    store.setExportUrl("blob:one");
-    store.setExportUrl("blob:two");
-    expect(revoke).toHaveBeenCalledWith("blob:one");
-    useEditorStore.getState().enterTemplate("frame03");
-    expect(revoke).toHaveBeenCalledWith("blob:two");
-    expect(useEditorStore.getState().exportUrl).toBeNull();
-    vi.unstubAllGlobals();
   });
 
   it("사진 교체 시 해당 슬롯의 양쪽 비율 조정값을 초기화한다", () => {
