@@ -41,8 +41,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={`${pretendard.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">
-        {children}
+      <body className="flex min-h-dvh flex-col">
+        {/* 참고 시안의 430px 폰 컬럼 — page 배경 위에 surface 컬럼이 뜬다 */}
+        <div className="bg-surface mx-auto flex w-full max-w-107.5 flex-1 flex-col">
+          {children}
+        </div>
         {/* 라우트 페이지뷰가 곧 지표 (PRD §2) — 대시보드 활성화는 Vercel 프로젝트 설정에서 */}
         <Analytics />
       </body>

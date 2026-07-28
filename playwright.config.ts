@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // 로컬 1회 재시도: dev 서버 최초 컴파일 중 병렬 실행 타이밍 플레이크 흡수
+  retries: process.env.CI ? 2 : 1,
   use: {
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",

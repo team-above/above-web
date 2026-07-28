@@ -87,27 +87,58 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center justify-between pb-4">
-        <Link href="/" className="text-sm font-medium">
-          ‹ Home
+      {/* 참고 시안: 48px 풀블리드 반투명 블러 바 + 0.5px 헤어라인 */}
+      <header className="bg-surface/85 relative flex h-12 shrink-0 items-center justify-between border-b-[0.5px] border-black/10 pr-3 pl-2 backdrop-blur-[20px]">
+        <Link
+          href="/"
+          className="text-ink flex items-center gap-0.5 text-base font-normal"
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          Home
         </Link>
-        <h1 className="font-bold">{template.name}</h1>
+        <h1 className="text-ink absolute left-1/2 -translate-x-1/2 text-[15px] font-semibold">
+          {template.name}
+        </h1>
         <button
           type="button"
           onClick={handleDownload}
           disabled={!exportable}
           aria-label="다운로드"
           title={exportable ? "PNG로 저장" : "사진을 넣으면 저장할 수 있어요"}
-          className={
-            exportable ? "text-lg font-semibold" : "text-lg text-neutral-300"
-          }
+          className={exportable ? "text-ink" : "text-ink opacity-25"}
         >
-          ↓
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" x2="12" y1="15" y2="3" />
+          </svg>
         </button>
       </header>
 
-      <div className="flex justify-center pb-4">
-        <div className="flex rounded-full bg-neutral-200/70 p-1">
+      <div className="flex justify-center pt-4 pb-4">
+        <div className="flex rounded-full bg-[rgba(118,118,128,0.12)] p-0.5">
           {(Object.keys(RATIO_LABEL) as VariantId[]).map((id) => (
             <button
               key={id}
@@ -115,8 +146,8 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
               onClick={() => setVariant(id)}
               className={
                 variant === id
-                  ? "rounded-full bg-white px-4 py-1.5 text-sm font-semibold shadow-sm"
-                  : "rounded-full px-4 py-1.5 text-sm text-neutral-500"
+                  ? "text-ink rounded-full bg-white px-4.5 py-[5px] text-[13px] font-semibold shadow-[0_1px_4px_rgba(0,0,0,0.12)]"
+                  : "text-muted rounded-full px-4.5 py-[5px] text-[13px] font-normal"
               }
             >
               {RATIO_LABEL[id]}
@@ -131,8 +162,8 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
         exportRef={exportRef}
       />
 
-      <p className="py-4 text-center text-sm text-neutral-400">
-        슬롯을 탭해서 사진을 넣어 보세요
+      <p className="text-muted pt-3 pb-3.5 text-center text-[11px]">
+        Tap a slot to add a photo
       </p>
 
       <input

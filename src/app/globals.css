@@ -1,18 +1,23 @@
 @import "tailwindcss";
 
+/* 참고 시안의 iOS 그레이 팔레트 (2026-07-28 실측) */
 :root {
-  --background: #f2f2f5;
-  --foreground: #171717;
+  --page: #e5e5ea; /* 페이지(컬럼 밖) 배경 */
+  --surface: #f2f2f7; /* 폰 컬럼 배경 */
+  --ink: #1c1c1e; /* 기본 텍스트 */
+  --muted: #8e8e93; /* 보조 텍스트·배지 */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--page);
+  color: var(--ink);
   font-family:
     var(--font-pretendard),
     "Pretendard Variable",

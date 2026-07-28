@@ -80,39 +80,43 @@ export default function EditorCanvas({
   }, [exportRef, variantData]);
 
   return (
-    <div
-      ref={containerRef}
-      data-testid="editor-canvas"
-      // touch-none: 캔버스 제스처(드래그/핀치)가 페이지 스크롤로 새지 않게
-      className="flex min-h-0 w-full flex-1 touch-none items-center justify-center"
-    >
-      {fitted && base && (
-        <Stage
-          ref={stageRef}
-          width={fitted.width}
-          height={fitted.height}
-          scaleX={fitted.scale}
-          scaleY={fitted.scale}
-        >
-          <Layer>
-            <KonvaImage image={base} listening={false} />
-            {variantData.placements.map((placement) => (
-              <PlacementNode
-                key={placement.slot}
-                placement={placement}
-                onTap={() => onSlotTap(placement.slot)}
-                stageScale={fitted.scale}
-              />
-            ))}
-            {overlay && <KonvaImage image={overlay} listening={false} />}
-          </Layer>
-          <Layer listening={false}>
-            {variantData.placements.map((placement) => (
-              <EmptySlotBadge key={placement.slot} placement={placement} />
-            ))}
-          </Layer>
-        </Stage>
-      )}
+    <div data-testid="editor-canvas" className="flex min-h-0 w-full flex-1 p-4">
+      {/* 안쪽 div가 측정 기준 — 바깥 p-4가 프레임 카드 그림자의 숨쉴 공간 */}
+      <div
+        ref={containerRef}
+        // touch-none: 캔버스 제스처(드래그/핀치)가 페이지 스크롤로 새지 않게
+        className="flex h-full w-full touch-none items-center justify-center"
+      >
+        {fitted && base && (
+          <div className="overflow-hidden rounded-lg bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.1),0_8px_32px_rgba(0,0,0,0.18)]">
+            <Stage
+              ref={stageRef}
+              width={fitted.width}
+              height={fitted.height}
+              scaleX={fitted.scale}
+              scaleY={fitted.scale}
+            >
+              <Layer>
+                <KonvaImage image={base} listening={false} />
+                {variantData.placements.map((placement) => (
+                  <PlacementNode
+                    key={placement.slot}
+                    placement={placement}
+                    onTap={() => onSlotTap(placement.slot)}
+                    stageScale={fitted.scale}
+                  />
+                ))}
+                {overlay && <KonvaImage image={overlay} listening={false} />}
+              </Layer>
+              <Layer listening={false}>
+                {variantData.placements.map((placement) => (
+                  <EmptySlotBadge key={placement.slot} placement={placement} />
+                ))}
+              </Layer>
+            </Stage>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

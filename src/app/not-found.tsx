@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <main className="mx-auto flex w-full max-w-135 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+    <main className="flex w-full flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <Image
         src="/logo-black.png"
         alt="above."

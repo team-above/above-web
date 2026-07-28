@@ -16,7 +16,7 @@ export default async function EditorPage({
   if (!template) notFound();
 
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-135 flex-col px-4 pt-4">
+    <main className="flex h-dvh w-full flex-col">
       <EditorShell template={template} />
     </main>
   );
