@@ -3,7 +3,7 @@
  * 사진은 슬롯 단위로 비율(variant)과 무관하게 공유하고, 배치 transform은 비율별로 독립 저장한다.
  */
 import { create } from "zustand";
-import type { PhotoTransform } from "@/features/editor/transform";
+import type { PlacementAdjust } from "@/features/editor/transform";
 import type { VariantId } from "@/templates/schema";
 
 export interface SlotPhoto {
@@ -16,7 +16,9 @@ interface EditorState {
   templateId: string | null;
   variant: VariantId;
   photos: Record<string, SlotPhoto>;
-  transforms: Record<VariantId, Record<string, PhotoTransform>>;
+  transforms: Record<VariantId, Record<string, PlacementAdjust>>;
+  /** 슬롯별 회전(라디안) — 사진 속성이라 비율 간 공유된다 (스펙 05 변경 2026-07-28) */
+  rotations: Record<string, number>;
   /** 지금 조작(드래그/핀치/휠) 중인 슬롯 — 슬롯 밖 고스트 표시용 */
   activeSlot: string | null;
   /** 하단 토스트 안내 (예: 저장 완료) — 라우트 이동에도 유지되도록 스토어에 둔다 */
@@ -28,8 +30,9 @@ interface EditorState {
   setTransform: (
     variant: VariantId,
     slotId: string,
-    transform: PhotoTransform,
+    adjust: PlacementAdjust,
   ) => void;
+  setRotation: (slotId: string, rotation: number) => void;
   setActiveSlot: (slotId: string | null) => void;
   setNotice: (message: string | null) => void;
   /** 에디터를 떠날 때(홈 복귀) 호출 — 전체 초기화. 에디터↔done 왕복은 유지된다 */
@@ -50,6 +53,7 @@ function releaseAndClear(state: { photos: Record<string, SlotPhoto> }) {
     variant: "post" as const,
     photos: {},
     transforms: emptyTransforms(),
+    rotations: {},
     activeSlot: null,
     notice: null,
   };
@@ -60,6 +64,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   variant: "post",
   photos: {},
   transforms: emptyTransforms(),
+  rotations: {},
   activeSlot: null,
   notice: null,
   enterTemplate: (templateId) =>
@@ -78,19 +83,24 @@ export const useEditorStore = create<EditorState>((set) => ({
       state.photos[slotId]?.bitmap.close?.(); // 교체 시 기존 비트맵 메모리 반환
       return {
         photos: { ...state.photos, [slotId]: photo },
-        // 사진이 바뀌면 양쪽 비율의 기존 배치는 무효 — 제거해 cover 초기화 유도
+        // 사진이 바뀌면 배치·회전 모두 무효 — 제거해 cover·무회전 초기화 유도
         transforms: {
           post: omit(state.transforms.post, slotId),
           story: omit(state.transforms.story, slotId),
         },
+        rotations: omit(state.rotations, slotId),
       };
     }),
-  setTransform: (variant, slotId, transform) =>
+  setTransform: (variant, slotId, adjust) =>
     set((state) => ({
       transforms: {
         ...state.transforms,
-        [variant]: { ...state.transforms[variant], [slotId]: transform },
+        [variant]: { ...state.transforms[variant], [slotId]: adjust },
       },
+    })),
+  setRotation: (slotId, rotation) =>
+    set((state) => ({
+      rotations: { ...state.rotations, [slotId]: rotation },
     })),
 }));
 

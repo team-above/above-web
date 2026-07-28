@@ -14,7 +14,12 @@ import {
 import { fitToViewport } from "@/lib/canvas-size";
 import { useEditorStore } from "@/stores/editor";
 import type { FrameTemplate, TemplatePlacement } from "@/templates/schema";
-import { clampTransform, initialTransform, zoomAt } from "./transform";
+import {
+  clampTransform,
+  composeTransform,
+  rotateTo,
+  zoomAt,
+} from "./transform";
 import { useImageElement } from "./use-image";
 
 /** 내보내기 함수 시그니처 — 메인 레이어를 캔버스 좌표계 네이티브 해상도로 래스터화 (스펙 04) */
@@ -133,15 +138,28 @@ function GhostPhoto({ placement }: { placement: TemplatePlacement }) {
   const active = useEditorStore((s) => s.activeSlot === placement.slot);
   const photo = useEditorStore((s) => s.photos[placement.slot]);
   const variant = useEditorStore((s) => s.variant);
-  const stored = useEditorStore((s) => s.transforms[variant][placement.slot]);
-  if (!active || !photo || !stored) return null;
+  const adjust = useEditorStore((s) => s.transforms[variant][placement.slot]);
+  const rotation = useEditorStore((s) => s.rotations[placement.slot] ?? 0);
+  if (!active || !photo) return null;
+  const size = { width: photo.bitmap.width, height: photo.bitmap.height };
+  const stored = composeTransform(
+    adjust ?? null,
+    rotation,
+    size,
+    placement.rect,
+  );
+  const drawnW = photo.bitmap.width * stored.scale;
+  const drawnH = photo.bitmap.height * stored.scale;
   return (
     <KonvaImage
       image={photo.bitmap}
-      x={placement.rect.x + stored.x}
-      y={placement.rect.y + stored.y}
-      width={photo.bitmap.width * stored.scale}
-      height={photo.bitmap.height * stored.scale}
+      x={placement.rect.x + placement.rect.width / 2 + stored.x}
+      y={placement.rect.y + placement.rect.height / 2 + stored.y}
+      offsetX={drawnW / 2}
+      offsetY={drawnH / 2}
+      width={drawnW}
+      height={drawnH}
+      rotation={(stored.rotation * 180) / Math.PI}
       opacity={0.35}
       listening={false}
     />
@@ -183,6 +201,8 @@ interface GestureSession {
   /** 누적 이동량 (캔버스 좌표 단위) — 탭/드래그 판별 */
   moved: number;
   lastDist: number | null;
+  /** 두 손가락 트위스트 회전용 직전 각도 */
+  lastAngle: number | null;
   cleanup: () => void;
 }
 
@@ -191,8 +211,8 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
   const { rect } = placement;
   const variant = useEditorStore((s) => s.variant);
   const photo = useEditorStore((s) => s.photos[placement.slot]);
-  const stored = useEditorStore((s) => s.transforms[variant][placement.slot]);
-  const setTransform = useEditorStore((s) => s.setTransform);
+  const adjust = useEditorStore((s) => s.transforms[variant][placement.slot]);
+  const rotation = useEditorStore((s) => s.rotations[placement.slot] ?? 0);
   const setActiveSlot = useEditorStore((s) => s.setActiveSlot);
 
   const mask = useImageElement(placement.mask);
@@ -203,14 +223,10 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
   const photoSize = photo
     ? { width: photo.bitmap.width, height: photo.bitmap.height }
     : null;
-
-  // 초기 배치(cover·중앙)는 스토어에 한 번만 기록한다 — 렌더마다 새 객체가 생기는 것 방지
-  useEffect(() => {
-    if (photoSize && !stored) {
-      setTransform(variant, placement.slot, initialTransform(photoSize, rect));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoSize?.width, photoSize?.height, stored, variant, placement.slot]);
+  // 비율별 조정값 + 공유 회전 합성 — 조정값이 없어도(비율 첫 진입) 항상 유효한 변환이 나온다
+  const stored = photoSize
+    ? composeTransform(adjust ?? null, rotation, photoSize, rect)
+    : null;
 
   // 마스크 합성(destination-in)은 그룹 캐시 안에서만 적용되어야 레이어 전체를 지우지 않는다
   const ready = Boolean(photo && mask && stored);
@@ -226,7 +242,15 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
     return () => {
       group.clearCache();
     };
-  }, [ready, stored, rect.width, rect.height]);
+  }, [
+    ready,
+    stored?.x,
+    stored?.y,
+    stored?.scale,
+    stored?.rotation,
+    rect.width,
+    rect.height,
+  ]);
 
   const sessionRef = useRef<GestureSession | null>(null);
   useEffect(
@@ -270,24 +294,39 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
   const readCurrent = () => {
     const state = useEditorStore.getState();
     const currentPhoto = state.photos[placement.slot];
-    const current = state.transforms[state.variant][placement.slot];
-    if (!currentPhoto || !current) return null;
-    return {
-      state,
-      current,
-      size: {
-        width: currentPhoto.bitmap.width,
-        height: currentPhoto.bitmap.height,
-      },
+    if (!currentPhoto) return null;
+    const size = {
+      width: currentPhoto.bitmap.width,
+      height: currentPhoto.bitmap.height,
     };
+    const current = composeTransform(
+      state.transforms[state.variant][placement.slot] ?? null,
+      state.rotations[placement.slot] ?? 0,
+      size,
+      rect,
+    );
+    return { state, current, size };
+  };
+
+  const writeBack = (
+    snapshot: NonNullable<ReturnType<typeof readCurrent>>,
+    next: { x: number; y: number; scale: number; rotation: number },
+  ) => {
+    snapshot.state.setTransform(snapshot.state.variant, placement.slot, {
+      x: next.x,
+      y: next.y,
+      scale: next.scale,
+    });
+    if (next.rotation !== snapshot.current.rotation) {
+      snapshot.state.setRotation(placement.slot, next.rotation);
+    }
   };
 
   const applyDrag = (dx: number, dy: number) => {
     const snapshot = readCurrent();
     if (!snapshot) return;
-    snapshot.state.setTransform(
-      snapshot.state.variant,
-      placement.slot,
+    writeBack(
+      snapshot,
       clampTransform(
         {
           ...snapshot.current,
@@ -303,10 +342,23 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
   const applyZoom = (factor: number, focus: { x: number; y: number }) => {
     const snapshot = readCurrent();
     if (!snapshot) return;
-    snapshot.state.setTransform(
-      snapshot.state.variant,
-      placement.slot,
+    writeBack(
+      snapshot,
       zoomAt(snapshot.current, factor, focus, snapshot.size, rect),
+    );
+  };
+
+  const applyRotate = (deltaRadians: number) => {
+    const snapshot = readCurrent();
+    if (!snapshot) return;
+    writeBack(
+      snapshot,
+      rotateTo(
+        snapshot.current,
+        snapshot.current.rotation + deltaRadians,
+        snapshot.size,
+        rect,
+      ),
     );
   };
 
@@ -319,9 +371,10 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
     const point = { x: e.evt.clientX, y: e.evt.clientY };
     const existing = sessionRef.current;
     if (existing) {
-      // 두 번째 손가락 → 핀치 모드 진입 (드래그로 오인 금지)
+      // 두 번째 손가락 → 핀치/트위스트 모드 진입 (드래그로 오인 금지)
       existing.pointers.set(e.evt.pointerId, point);
       existing.lastDist = null;
+      existing.lastAngle = null;
       existing.moved = 99;
       return;
     }
@@ -343,13 +396,19 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
       } else if (s.pointers.size === 2) {
         const [a, b] = [...s.pointers.values()];
         const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        const angle = Math.atan2(b.y - a.y, b.x - a.x);
         if (s.lastDist !== null && s.lastDist > 0) {
           applyZoom(
             dist / s.lastDist,
             toLocal((a.x + b.x) / 2, (a.y + b.y) / 2),
           );
         }
+        if (s.lastAngle !== null) {
+          // 두 손가락 트위스트 = 자유 회전 (스펙 05)
+          applyRotate(angle - s.lastAngle);
+        }
         s.lastDist = dist;
+        s.lastAngle = angle;
       }
     };
     const onUp = (ev: PointerEvent) => {
@@ -357,6 +416,7 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
       if (!s || !s.pointers.has(ev.pointerId)) return;
       s.pointers.delete(ev.pointerId);
       s.lastDist = null;
+      s.lastAngle = null;
       if (s.pointers.size > 0) return;
       s.cleanup();
       sessionRef.current = null;
@@ -373,7 +433,13 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-    sessionRef.current = { pointers, moved: 0, lastDist: null, cleanup };
+    sessionRef.current = {
+      pointers,
+      moved: 0,
+      lastDist: null,
+      lastAngle: null,
+      cleanup,
+    };
   };
 
   return (
@@ -400,20 +466,32 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
           wheelIdleTimer.current = setTimeout(() => {
             if (!sessionRef.current) setActiveSlot(null);
           }, 500);
-          applyZoom(
-            Math.exp(-e.evt.deltaY * 0.002),
-            toLocal(e.evt.clientX, e.evt.clientY),
-          );
+          // Shift를 누르면 휠 델타가 deltaX로 오는 환경(macOS 등)이 있다
+          const delta =
+            Math.abs(e.evt.deltaY) >= Math.abs(e.evt.deltaX)
+              ? e.evt.deltaY
+              : e.evt.deltaX;
+          if (e.evt.shiftKey) {
+            applyRotate(delta * 0.002); // Shift+휠 = 자유 회전 (스펙 05)
+          } else {
+            applyZoom(
+              Math.exp(-delta * 0.002),
+              toLocal(e.evt.clientX, e.evt.clientY),
+            );
+          }
         }}
       />
       {ready && photoSize && stored && (
         <>
           <KonvaImage
             image={photo!.bitmap}
-            x={stored.x}
-            y={stored.y}
+            x={rect.width / 2 + stored.x}
+            y={rect.height / 2 + stored.y}
+            offsetX={(photoSize.width * stored.scale) / 2}
+            offsetY={(photoSize.height * stored.scale) / 2}
             width={photoSize.width * stored.scale}
             height={photoSize.height * stored.scale}
+            rotation={(stored.rotation * 180) / Math.PI}
             listening={false}
           />
           <KonvaImage

@@ -21,16 +21,42 @@ describe("editor 스토어", () => {
     expect(next.transforms).toEqual({ post: {}, story: {} });
   });
 
+  it("회전은 비율 간 공유되고, 사진 교체 시 초기화된다", () => {
+    const store = useEditorStore.getState();
+    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
+    store.setRotation("left", 0.7);
+    store.setVariant("story");
+    expect(useEditorStore.getState().rotations.left).toBe(0.7); // 비율 전환에도 유지
+    store.setPhoto("left", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
+    expect(useEditorStore.getState().rotations.left).toBeUndefined(); // 교체 시 무회전
+  });
+
   it("비율 전환 시 사진과 비율별 조정값이 보존된다", () => {
     const store = useEditorStore.getState();
     store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    store.setTransform("post", "left", { x: -10, y: 0, scale: 1.5 });
+    store.setTransform("post", "left", {
+      x: -10,
+      y: 0,
+      scale: 1.5,
+    });
     store.setVariant("story");
-    store.setTransform("story", "left", { x: -99, y: -5, scale: 2 });
+    store.setTransform("story", "left", {
+      x: -99,
+      y: -5,
+      scale: 2,
+    });
     const state = useEditorStore.getState();
     expect(state.photos.left.fileName).toBe("a.jpg");
-    expect(state.transforms.post.left).toEqual({ x: -10, y: 0, scale: 1.5 });
-    expect(state.transforms.story.left).toEqual({ x: -99, y: -5, scale: 2 });
+    expect(state.transforms.post.left).toEqual({
+      x: -10,
+      y: 0,
+      scale: 1.5,
+    });
+    expect(state.transforms.story.left).toEqual({
+      x: -99,
+      y: -5,
+      scale: 2,
+    });
   });
 
   it("reset은 전체 상태를 비우고 비트맵을 닫는다 (홈 복귀)", () => {
@@ -62,14 +88,30 @@ describe("editor 스토어", () => {
   it("사진 교체 시 해당 슬롯의 양쪽 비율 조정값을 초기화한다", () => {
     const store = useEditorStore.getState();
     store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    store.setTransform("post", "left", { x: -10, y: 0, scale: 1.5 });
-    store.setTransform("story", "left", { x: -20, y: 0, scale: 2 });
-    store.setTransform("post", "right", { x: -1, y: -1, scale: 1.2 });
+    store.setTransform("post", "left", {
+      x: -10,
+      y: 0,
+      scale: 1.5,
+    });
+    store.setTransform("story", "left", {
+      x: -20,
+      y: 0,
+      scale: 2,
+    });
+    store.setTransform("post", "right", {
+      x: -1,
+      y: -1,
+      scale: 1.2,
+    });
     store.setPhoto("left", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
     const state = useEditorStore.getState();
     expect(state.photos.left.fileName).toBe("b.jpg");
     expect(state.transforms.post.left).toBeUndefined();
     expect(state.transforms.story.left).toBeUndefined();
-    expect(state.transforms.post.right).toEqual({ x: -1, y: -1, scale: 1.2 }); // 다른 슬롯 불변
+    expect(state.transforms.post.right).toEqual({
+      x: -1,
+      y: -1,
+      scale: 1.2,
+    }); // 다른 슬롯 불변
   });
 });

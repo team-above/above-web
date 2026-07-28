@@ -119,6 +119,71 @@ test("story 비율로 내보내면 1080×1920", async ({ page }) => {
   expect(png.height).toBe(1920);
 });
 
+test("Shift+휠 회전(90° 스냅)이 미리보기와 내보내기에 반영된다", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop-chrome",
+    "Shift+휠은 데스크톱 전용 조작",
+  );
+  await openEditor(page, "frame01");
+  // 좌 빨강/우 파랑 가로 사진 → 90° 회전하면 위 빨강/아래 파랑이 된다
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const v = frame01.variants.post;
+  const rect = v.placements[0].rect;
+  const scale = box.width / v.canvas.width;
+  const center = {
+    x: box.x + (rect.x + rect.width / 2) * scale,
+    y: box.y + (rect.y + rect.height / 2) * scale,
+  };
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  // Shift+휠 누적 800 → 91.7° → 90° 스냅
+  await page.mouse.move(center.x, center.y);
+  await page.keyboard.down("Shift");
+  await page.mouse.wheel(0, 800);
+  await page.keyboard.up("Shift");
+
+  const { png } = await downloadPng(page);
+  const top = pixelOf(png, rect.x + Math.floor(rect.width / 2), rect.y + 30);
+  const bottom = pixelOf(
+    png,
+    rect.x + Math.floor(rect.width / 2),
+    rect.y + rect.height - 30,
+  );
+  expect(top.r - top.b).toBeGreaterThan(100); // 사진 왼쪽(빨강)이 위로
+  expect(bottom.b - bottom.r).toBeGreaterThan(100); // 오른쪽(파랑)이 아래로
+
+  // 비율 전환 후에도 회전(사진 속성)이 유지된다 — story 내보내기에서도 위 빨강/아래 파랑
+  await page.getByRole("button", { name: "Story 9:16" }).click();
+  await expect
+    .poll(async () => {
+      const b = await canvas.boundingBox();
+      return b ? b.height / b.width : 0;
+    })
+    .toBeGreaterThan(1.7);
+  const { png: storyPng } = await downloadPng(page);
+  const storyRect = frame01.variants.story.placements[0].rect;
+  const storyTop = pixelOf(
+    storyPng,
+    storyRect.x + Math.floor(storyRect.width / 2),
+    storyRect.y + 30,
+  );
+  const storyBottom = pixelOf(
+    storyPng,
+    storyRect.x + Math.floor(storyRect.width / 2),
+    storyRect.y + storyRect.height - 30,
+  );
+  expect(storyTop.r - storyTop.b).toBeGreaterThan(100);
+  expect(storyBottom.b - storyBottom.r).toBeGreaterThan(100);
+});
+
 test("사진이 없으면 다운로드 버튼이 비활성이다", async ({ page }) => {
   await openEditor(page, "frame01");
   await expect(page.getByRole("button", { name: "다운로드" })).toBeDisabled();
