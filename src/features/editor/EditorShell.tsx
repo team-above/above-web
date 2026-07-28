@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Toast } from "@/components/Toast";
 import { useEditorStore } from "@/stores/editor";
 import type { FrameTemplate, VariantId } from "@/templates/schema";
 import type { ExportFn } from "./EditorCanvas";
@@ -189,11 +190,7 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
         }}
       />
 
-      {(error ?? notice) && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-neutral-900/90 px-4 py-2 text-sm text-white">
-          {error ?? notice}
-        </div>
-      )}
+      <Toast message={error ?? notice} tone={error ? "error" : "success"} />
     </div>
   );
 }

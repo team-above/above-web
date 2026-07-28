@@ -6,6 +6,7 @@
   --surface: #f2f2f7; /* 폰 컬럼 배경 */
   --ink: #1c1c1e; /* 기본 텍스트 */
   --muted: #8e8e93; /* 보조 텍스트·배지 */
+  --accent: #ff3c00; /* 브랜드 오렌지 (파비콘) — 에러·강조 */
 }
 
 @theme inline {
@@ -13,6 +14,25 @@
   --color-surface: var(--surface);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
+  --color-accent: var(--accent);
+}
+
+/* 토스트 등장(스프링)·퇴장 */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+  }
 }
 
 /* Tailwind v4 preflight는 버튼 커서를 default로 두므로 클릭 가능 요소에 pointer를 복원한다 */
