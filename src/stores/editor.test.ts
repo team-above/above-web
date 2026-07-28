@@ -72,6 +72,33 @@ describe("editor 스토어", () => {
     expect(state.focals.right).toEqual({ x: -1, y: -1 });
   });
 
+  it("removePhoto는 사진·편집 상태를 지우고 선택도 해제한다 (✕ 버튼, 스펙 06)", () => {
+    const close = vi.fn();
+    const store = useEditorStore.getState();
+    store.setPhoto("left", {
+      bitmap: { width: 1, height: 1, close } as unknown as ImageBitmap,
+      fileName: "a.jpg",
+    });
+    store.setPhoto("right", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
+    store.setFocal("left", { x: 5, y: 5 });
+    store.setRotation("left", 0.3);
+    store.setZoom("left", 2);
+    store.setSelectedSlot("left");
+    store.removePhoto("left");
+    const state = useEditorStore.getState();
+    expect(close).toHaveBeenCalled(); // 비트맵 메모리 반환
+    expect(state.photos.left).toBeUndefined();
+    expect(state.focals.left).toBeUndefined();
+    expect(state.rotations.left).toBeUndefined();
+    expect(state.zooms.left).toBeUndefined();
+    expect(state.selectedSlot).toBeNull();
+    expect(state.photos.right).toBeDefined(); // 다른 슬롯 불변
+    // 선택 중이 아닌 슬롯을 지워도 기존 선택은 유지된다
+    store.setSelectedSlot("right");
+    store.removePhoto("left"); // 이미 빈 슬롯 — 무해
+    expect(useEditorStore.getState().selectedSlot).toBe("right");
+  });
+
   it("선택은 토글 가능하고 비율 전환 시 자동 해제된다 (스펙 06)", () => {
     const store = useEditorStore.getState();
     store.setSelectedSlot("left");

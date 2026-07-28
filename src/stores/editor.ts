@@ -31,6 +31,8 @@ interface EditorState {
   enterTemplate: (templateId: string) => void;
   setVariant: (variant: VariantId) => void;
   setPhoto: (slotId: string, photo: SlotPhoto) => void;
+  /** 슬롯의 사진을 삭제하고 빈 슬롯으로 되돌린다 (✕ 버튼, 스펙 06) */
+  removePhoto: (slotId: string) => void;
   setFocal: (slotId: string, focal: FocalPoint) => void;
   setRotation: (slotId: string, rotation: number) => void;
   setZoom: (slotId: string, zoom: number) => void;
@@ -86,6 +88,18 @@ export const useEditorStore = create<EditorState>((set) => ({
         focals: omit(state.focals, slotId),
         rotations: omit(state.rotations, slotId),
         zooms: omit(state.zooms, slotId),
+      };
+    }),
+  removePhoto: (slotId) =>
+    set((state) => {
+      state.photos[slotId]?.bitmap.close?.(); // 비트맵 메모리 반환
+      return {
+        photos: omit(state.photos, slotId),
+        focals: omit(state.focals, slotId),
+        rotations: omit(state.rotations, slotId),
+        zooms: omit(state.zooms, slotId),
+        // 삭제된 슬롯이 선택 중이었으면 함께 해제
+        selectedSlot: state.selectedSlot === slotId ? null : state.selectedSlot,
       };
     }),
   setFocal: (slotId, focal) =>

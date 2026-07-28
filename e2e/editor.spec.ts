@@ -353,7 +353,9 @@ async function selectionButtons(page: Page, slotIndex = 0) {
   };
 }
 
-test("✕로 해제, 📷로 교체 파일 선택이 열린다 (스펙 06)", async ({ page }) => {
+test("📷로 교체 파일 선택이 열리고, ✕는 사진을 삭제한다 (스펙 06)", async ({
+  page,
+}) => {
   await openEditor(page, "frame01");
   const center = await placementCenter(page, frame01, "post", "left");
   await attachPhoto(page, center); // 자동 선택
@@ -366,7 +368,6 @@ test("✕로 해제, 📷로 교체 파일 선택이 열린다 (스펙 06)", asy
   const chooser = await chooserPromise;
   await chooser.setFiles(FIXTURE); // 교체 (자동 선택 유지)
 
-  // ✕ → 해제: 고스트 사라짐으로 판정
   const { rect } = frame01.variants.post.placements[0];
   const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
   const box = (await canvas.boundingBox())!;
@@ -378,10 +379,17 @@ test("✕로 해제, 📷로 교체 파일 선택이 열린다 (스펙 06)", asy
   await expect
     .poll(async () => (await ghostAt(page, probe)).a)
     .toBeGreaterThan(40); // 교체 후에도 선택 상태(고스트)
+
+  // ✕ → 사진 삭제: 슬롯이 자리표시(무채색)로 복귀, 유일한 사진이므로 다운로드 비활성
   await page.mouse.click(buttons.close.x, buttons.close.y);
   await expect
-    .poll(async () => (await ghostAt(page, probe)).a)
-    .toBeLessThan(10);
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return p.r - p.g;
+    })
+    .toBeLessThan(60);
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeDisabled();
+  expect((await ghostAt(page, probe)).a).toBeLessThan(10); // 선택 UI도 사라짐
 });
 
 test("궤도 핸들 드래그로 회전한다 (90° 스냅)", async ({ page }, testInfo) => {
@@ -606,7 +614,7 @@ test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유,
     .toBeGreaterThan(100);
 });
 
-test("터치 탭으로 ✕ 해제·📷 교체가 동작한다 (스펙 06)", async ({
+test("터치 탭으로 📷 교체·✕ 사진 삭제가 동작한다 (스펙 06)", async ({
   page,
 }, testInfo) => {
   test.skip(
@@ -638,20 +646,24 @@ test("터치 탭으로 ✕ 해제·📷 교체가 동작한다 (스펙 06)", asy
   await page.touchscreen.tap(buttons.camera.x, buttons.camera.y);
   await (await replacePromise).setFiles(FIXTURE);
 
-  // ✕ 터치 탭 → 해제
+  // ✕ 터치 탭 → 사진 삭제: 자리표시 복귀 + 다운로드 비활성
   await expect
     .poll(async () => (await ghostAt(page, probe)).a)
     .toBeGreaterThan(40);
   await page.touchscreen.tap(buttons.close.x, buttons.close.y);
   await expect
-    .poll(async () => (await ghostAt(page, probe)).a)
-    .toBeLessThan(10);
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return p.r - p.g;
+    })
+    .toBeLessThan(60);
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeDisabled();
 
-  // 사진 터치 탭 → 재선택 (토글)
+  // 빈 슬롯 터치 탭 → 다시 파일 선택창 (첨부 플로우 복귀)
+  const reattachPromise = page.waitForEvent("filechooser");
   await page.touchscreen.tap(center.x, center.y);
-  await expect
-    .poll(async () => (await ghostAt(page, probe)).a)
-    .toBeGreaterThan(40);
+  await (await reattachPromise).setFiles(FIXTURE);
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 });
 
 test("드래그를 이웃 슬롯 위에서 놓아도 파일 선택창이 열리지 않는다", async ({

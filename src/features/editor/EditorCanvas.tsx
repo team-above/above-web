@@ -502,7 +502,7 @@ interface SelectionControlsProps {
   onReplace: (slotId: string) => void;
 }
 
-/** 선택 테두리 + ✕(해제)·📷(교체)·⟳(궤도 회전 핸들) 오버레이 (스펙 06) */
+/** 선택 테두리 + ✕(사진 삭제)·📷(교체)·⟳(궤도 회전 핸들) 오버레이 (스펙 06) */
 function SelectionControls({
   variantData,
   stageScale,
@@ -512,7 +512,7 @@ function SelectionControls({
   const photo = useEditorStore((s) =>
     selected ? s.photos[selected] : undefined,
   );
-  const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
+  const removePhoto = useEditorStore((s) => s.removePhoto);
   const groupRef = useRef<Konva.Group>(null);
   const rotateSession = useRef<{ cleanup: () => void } | null>(null);
   useEffect(() => () => rotateSession.current?.cleanup(), []);
@@ -616,19 +616,19 @@ function SelectionControls({
         shadowBlur={px(4)}
         listening={false}
       />
-      {/* ✕ 해제 (우상단) — 액션은 탭 완료 시점(click/tap/pointerclick)에.
-          누르는 순간(pointerdown)은 iOS 실기기에서 유실·경합이 있어 신뢰할 수 없다 */}
+      {/* ✕ 사진 삭제 (우상단) — 슬롯을 빈 상태로 되돌린다 (선택 해제는 배경 탭·재탭).
+          액션은 탭 완료 시점(click/tap/pointerclick)에 — pointerdown은 iOS 실기기에서 신뢰 불가 */}
       <Group
-        name="deselect-button"
+        name="remove-button"
         x={closeX}
         y={closeY}
         onPointerDown={(e) => {
           e.evt.preventDefault();
           e.cancelBubble = true;
         }}
-        onClick={once("deselect", () => setSelectedSlot(null))}
-        onTap={once("deselect", () => setSelectedSlot(null))}
-        onPointerClick={once("deselect", () => setSelectedSlot(null))}
+        onClick={once("remove", () => removePhoto(selected))}
+        onTap={once("remove", () => removePhoto(selected))}
+        onPointerClick={once("remove", () => removePhoto(selected))}
         onMouseEnter={() => {
           const c = groupRef.current?.getStage()?.container();
           if (c) c.style.cursor = "pointer";
