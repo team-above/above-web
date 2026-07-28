@@ -42,6 +42,15 @@ interface FrameConfig {
     components: Component[],
     image: RawImage,
   ) => Map<string, Component[]>;
+  /**
+   * 슬롯 placement rect 오버라이드 (기본 = 성분 합집합 bbox).
+   * 사진이 마스크보다 넓은 영역을 덮어야 하는 슬롯에 사용 — 마스크도 이 rect 기준으로 생성된다.
+   */
+  rectOverride?: (
+    slotId: string,
+    grouped: Map<string, Component[]>,
+    image: RawImage,
+  ) => { x: number; y: number; width: number; height: number } | null;
 }
 
 const FRAME_CONFIGS: FrameConfig[] = [
@@ -69,6 +78,12 @@ const FRAME_CONFIGS: FrameConfig[] = [
         ["stars", components.filter((c) => c !== main)],
         ["main", [main]],
       ]);
+    },
+    // 별 슬롯 사진은 별무리 bbox가 아니라 상단 파란 영역 전체(프레임 전폭)를 덮는다 (사용자 확정 2026-07-28)
+    rectOverride: (slotId, grouped, image) => {
+      if (slotId !== "stars") return null;
+      const main = grouped.get("main")![0];
+      return { x: 0, y: 0, width: image.width, height: main.bbox.y };
     },
   },
   {
@@ -181,7 +196,9 @@ async function deriveVariant(
         `${config.id}/${variant}: 슬롯 "${slot.id}"에 배정된 성분 없음`,
       );
     }
-    const bbox = unionBbox(comps.map((c) => c.bbox));
+    const bbox =
+      config.rectOverride?.(slot.id, grouped, image) ??
+      unionBbox(comps.map((c) => c.bbox));
     const mask = buildSlotMask(
       labels,
       image.width,
