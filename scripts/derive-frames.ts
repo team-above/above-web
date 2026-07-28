@@ -212,12 +212,12 @@ async function deriveVariant(
   };
 }
 
-/** 사용 예시 시안(SampleNN) → ¼ 축소 카드 미리보기 (스펙 02) */
+/** 사용 예시 시안(SampleNN) → ½ 축소 카드 미리보기 (스펙 02, 고DPR 대응 1080w) */
 async function derivePreview(config: FrameConfig): Promise<string> {
   const sample = readPng(
     path.join(DESIGN_DIR, `Sample${config.id.slice(-2)}.png`),
   );
-  const preview = downscaleHalf(downscaleHalf(sample));
+  const preview = downscaleHalf(sample);
   const outDir = path.join(PUBLIC_DIR, config.id);
   mkdirSync(outDir, { recursive: true });
   await writeWebp(path.join(outDir, "preview.webp"), preview);

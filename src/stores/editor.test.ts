@@ -33,6 +33,32 @@ describe("editor 스토어", () => {
     expect(state.transforms.story.left).toEqual({ x: -99, y: -5, scale: 2 });
   });
 
+  it("reset은 전체 상태를 비우고 비트맵을 닫는다 (홈 복귀)", () => {
+    const close = vi.fn();
+    const store = useEditorStore.getState();
+    store.setPhoto("left", {
+      bitmap: { width: 1, height: 1, close } as unknown as ImageBitmap,
+      fileName: "a.jpg",
+    });
+    store.setVariant("story");
+    store.setActiveSlot("left");
+    useEditorStore.getState().reset();
+    const state = useEditorStore.getState();
+    expect(close).toHaveBeenCalled();
+    expect(state.templateId).toBeNull();
+    expect(state.photos).toEqual({});
+    expect(state.variant).toBe("post");
+    expect(state.activeSlot).toBeNull();
+    expect(state.exportUrl).toBeNull();
+  });
+
+  it("activeSlot을 설정·해제한다 (고스트 표시 트리거)", () => {
+    useEditorStore.getState().setActiveSlot("left");
+    expect(useEditorStore.getState().activeSlot).toBe("left");
+    useEditorStore.getState().setActiveSlot(null);
+    expect(useEditorStore.getState().activeSlot).toBeNull();
+  });
+
   it("내보내기 URL 교체·템플릿 전환 시 이전 objectURL을 revoke한다", () => {
     const revoke = vi.fn();
     vi.stubGlobal("URL", { ...URL, revokeObjectURL: revoke });

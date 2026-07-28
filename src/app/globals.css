@@ -15,6 +15,12 @@
   --color-muted: var(--muted);
 }
 
+/* Tailwind v4 preflight는 버튼 커서를 default로 두므로 클릭 가능 요소에 pointer를 복원한다 */
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
 body {
   background: var(--page);
   color: var(--ink);

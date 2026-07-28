@@ -108,7 +108,11 @@ export default function EditorCanvas({
                 ))}
                 {overlay && <KonvaImage image={overlay} listening={false} />}
               </Layer>
+              {/* UI 레이어 — 내보내기·시각 회귀 비교 대상이 아니다 */}
               <Layer listening={false}>
+                {variantData.placements.map((placement) => (
+                  <GhostPhoto key={placement.slot} placement={placement} />
+                ))}
                 {variantData.placements.map((placement) => (
                   <EmptySlotBadge key={placement.slot} placement={placement} />
                 ))}
@@ -118,6 +122,29 @@ export default function EditorCanvas({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 조작 중인 슬롯의 사진 전체를 35% 투명도로 보여준다 — 슬롯 밖으로 잘리는 영역 미리보기.
+ * 슬롯 안쪽은 아래(메인 레이어)의 불투명 사진과 같은 픽셀이라 겹쳐도 표가 나지 않는다.
+ */
+function GhostPhoto({ placement }: { placement: TemplatePlacement }) {
+  const active = useEditorStore((s) => s.activeSlot === placement.slot);
+  const photo = useEditorStore((s) => s.photos[placement.slot]);
+  const variant = useEditorStore((s) => s.variant);
+  const stored = useEditorStore((s) => s.transforms[variant][placement.slot]);
+  if (!active || !photo || !stored) return null;
+  return (
+    <KonvaImage
+      image={photo.bitmap}
+      x={placement.rect.x + stored.x}
+      y={placement.rect.y + stored.y}
+      width={photo.bitmap.width * stored.scale}
+      height={photo.bitmap.height * stored.scale}
+      opacity={0.35}
+      listening={false}
+    />
   );
 }
 
@@ -166,9 +193,12 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
   const photo = useEditorStore((s) => s.photos[placement.slot]);
   const stored = useEditorStore((s) => s.transforms[variant][placement.slot]);
   const setTransform = useEditorStore((s) => s.setTransform);
+  const setActiveSlot = useEditorStore((s) => s.setActiveSlot);
 
   const mask = useImageElement(placement.mask);
   const groupRef = useRef<Konva.Group>(null);
+  // 휠 줌은 이벤트가 이산적이라 잠깐 뒤에 고스트를 끈다
+  const wheelIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const photoSize = photo
     ? { width: photo.bitmap.width, height: photo.bitmap.height }
@@ -199,7 +229,13 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
   }, [ready, stored, rect.width, rect.height]);
 
   const sessionRef = useRef<GestureSession | null>(null);
-  useEffect(() => () => sessionRef.current?.cleanup(), []);
+  useEffect(
+    () => () => {
+      sessionRef.current?.cleanup();
+      if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
+    },
+    [],
+  );
 
   const toLocal = (clientX: number, clientY: number) => {
     const box = groupRef.current
@@ -212,25 +248,65 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
     };
   };
 
+  /** 데스크톱 커서 힌트 — 빈 슬롯 pointer, 사진 있으면 grab, 드래그 중 grabbing */
+  const setCursor = (cursor: string) => {
+    const container = groupRef.current?.getStage()?.container();
+    if (container) container.style.cursor = cursor;
+  };
+  const hoverCursor = () => setCursor(photo ? "grab" : "pointer");
+  const hoveredRef = useRef(false);
+  // 파일 선택 직후처럼 경계 이동 없이 사진 상태만 바뀐 경우에도 커서를 갱신한다
+  const hasPhoto = Boolean(photo);
+  useEffect(() => {
+    if (hoveredRef.current && !sessionRef.current) {
+      setCursor(hasPhoto ? "grab" : "pointer");
+    }
+  }, [hasPhoto]);
+
+  /**
+   * 드래그/줌 적용 — 윈도우 리스너(세션 생성 시점 클로저)에서 호출되므로
+   * 반드시 스토어에서 최신 상태를 읽는다. 렌더 클로저의 stored를 쓰면 이동이 누적되지 않는다.
+   */
+  const readCurrent = () => {
+    const state = useEditorStore.getState();
+    const currentPhoto = state.photos[placement.slot];
+    const current = state.transforms[state.variant][placement.slot];
+    if (!currentPhoto || !current) return null;
+    return {
+      state,
+      current,
+      size: {
+        width: currentPhoto.bitmap.width,
+        height: currentPhoto.bitmap.height,
+      },
+    };
+  };
+
   const applyDrag = (dx: number, dy: number) => {
-    if (!photoSize || !stored) return;
-    setTransform(
-      variant,
+    const snapshot = readCurrent();
+    if (!snapshot) return;
+    snapshot.state.setTransform(
+      snapshot.state.variant,
       placement.slot,
       clampTransform(
-        { ...stored, x: stored.x + dx, y: stored.y + dy },
-        photoSize,
+        {
+          ...snapshot.current,
+          x: snapshot.current.x + dx,
+          y: snapshot.current.y + dy,
+        },
+        snapshot.size,
         rect,
       ),
     );
   };
 
   const applyZoom = (factor: number, focus: { x: number; y: number }) => {
-    if (!photoSize || !stored) return;
-    setTransform(
-      variant,
+    const snapshot = readCurrent();
+    if (!snapshot) return;
+    snapshot.state.setTransform(
+      snapshot.state.variant,
       placement.slot,
-      zoomAt(stored, factor, focus, photoSize, rect),
+      zoomAt(snapshot.current, factor, focus, snapshot.size, rect),
     );
   };
 
@@ -250,6 +326,10 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
       return;
     }
     const pointers = new Map([[e.evt.pointerId, point]]);
+    // 휠 유휴 타이머가 드래그 세션 중 고스트를 꺼버리지 않게 취소
+    if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
+    setActiveSlot(placement.slot); // 조작 시작 → 슬롯 밖 고스트 표시
+    if (photo) setCursor("grabbing");
     const onMove = (ev: PointerEvent) => {
       const s = sessionRef.current;
       if (!s || !s.pointers.has(ev.pointerId)) return;
@@ -280,6 +360,8 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
       if (s.pointers.size > 0) return;
       s.cleanup();
       sessionRef.current = null;
+      setActiveSlot(null); // 조작 종료 → 고스트 숨김
+      hoverCursor(); // 드래그 종료 후 커서 복원 (슬롯 밖이면 다음 이동에서 leave가 정리)
       // 이동이 거의 없으면 탭 — 빈 슬롯은 추가, 사진 있으면 교체 (사용자 확정 A안)
       if (s.moved < 6) onTap();
     };
@@ -302,9 +384,22 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
         height={rect.height}
         opacity={0}
         fill="#000"
+        onMouseOver={() => {
+          hoveredRef.current = true;
+          hoverCursor();
+        }}
+        onMouseOut={() => {
+          hoveredRef.current = false;
+          if (!sessionRef.current) setCursor("");
+        }}
         onPointerDown={startSession}
         onWheel={(e) => {
           e.evt.preventDefault();
+          setActiveSlot(placement.slot);
+          if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
+          wheelIdleTimer.current = setTimeout(() => {
+            if (!sessionRef.current) setActiveSlot(null);
+          }, 500);
           applyZoom(
             Math.exp(-e.evt.deltaY * 0.002),
             toLocal(e.evt.clientX, e.evt.clientY),

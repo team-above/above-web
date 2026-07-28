@@ -19,6 +19,8 @@ interface EditorState {
   transforms: Record<VariantId, Record<string, PhotoTransform>>;
   /** 마지막 내보내기 결과 objectURL — done 화면 미리보기용 (스펙 04) */
   exportUrl: string | null;
+  /** 지금 조작(드래그/핀치/휠) 중인 슬롯 — 슬롯 밖 고스트 표시용 */
+  activeSlot: string | null;
   /** 템플릿 진입 시 호출 — 다른 템플릿이면 전체 초기화 */
   enterTemplate: (templateId: string) => void;
   setVariant: (variant: VariantId) => void;
@@ -29,6 +31,9 @@ interface EditorState {
     transform: PhotoTransform,
   ) => void;
   setExportUrl: (url: string) => void;
+  setActiveSlot: (slotId: string | null) => void;
+  /** 에디터를 떠날 때(홈 복귀) 호출 — 전체 초기화. 에디터↔done 왕복은 유지된다 */
+  reset: () => void;
 }
 
 function revokeUrl(url: string | null) {
@@ -42,28 +47,40 @@ const emptyTransforms = (): EditorState["transforms"] => ({
   story: {},
 });
 
+/** 비트맵·objectURL 메모리를 반환하고 초기 상태 조각을 만든다 */
+function releaseAndClear(state: {
+  photos: Record<string, SlotPhoto>;
+  exportUrl: string | null;
+}) {
+  for (const photo of Object.values(state.photos)) {
+    photo.bitmap.close?.();
+  }
+  revokeUrl(state.exportUrl);
+  return {
+    variant: "post" as const,
+    photos: {},
+    transforms: emptyTransforms(),
+    exportUrl: null,
+    activeSlot: null,
+  };
+}
+
 export const useEditorStore = create<EditorState>((set) => ({
   templateId: null,
   variant: "post",
   photos: {},
   transforms: emptyTransforms(),
   exportUrl: null,
+  activeSlot: null,
   enterTemplate: (templateId) =>
-    set((state) => {
-      if (state.templateId === templateId) return state;
-      // 이전 템플릿의 비트맵·내보내기 URL 메모리 반환
-      for (const photo of Object.values(state.photos)) {
-        photo.bitmap.close?.();
-      }
-      revokeUrl(state.exportUrl);
-      return {
-        templateId,
-        variant: "post",
-        photos: {},
-        transforms: emptyTransforms(),
-        exportUrl: null,
-      };
-    }),
+    set((state) =>
+      state.templateId === templateId
+        ? state
+        : { templateId, ...releaseAndClear(state) },
+    ),
+  reset: () =>
+    set((state) => ({ templateId: null, ...releaseAndClear(state) })),
+  setActiveSlot: (slotId) => set({ activeSlot: slotId }),
   setVariant: (variant) => set({ variant }),
   setPhoto: (slotId, photo) =>
     set((state) => {

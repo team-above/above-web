@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { ResetEditor } from "@/features/home/ResetEditor";
 import { Reveal } from "@/features/home/Reveal";
 import { TemplateCard } from "@/features/home/TemplateCard";
 import { templates } from "@/templates";
@@ -6,6 +7,7 @@ import { templates } from "@/templates";
 export default function Home() {
   return (
     <main className="flex w-full flex-1 flex-col pb-20">
+      <ResetEditor />
       <header className="px-5 pt-5 pb-4">
         <h1>
           <Image

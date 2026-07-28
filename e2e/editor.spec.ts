@@ -218,6 +218,162 @@ test("드래그·줌을 끝까지 밀어도 슬롯에 빈틈이 생기지 않는
   expect(errors).toEqual([]);
 });
 
+test("드래그로 사진이 실제로 이동한다 (누적 이동)", async ({ page }) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  // 가로로 긴 2색(좌 빨강/우 파랑) 사진 → cover 상태에서도 좌우 이동 범위가 넓다
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  // 오른쪽 끝까지 드래그 → 사진 왼쪽(빨강)이 슬롯 중앙에 온다
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 300, center.y, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return p.r - p.b;
+    })
+    .toBeGreaterThan(100);
+
+  // 왼쪽 끝까지 드래그 → 파랑
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x - 600, center.y, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return p.b - p.r;
+    })
+    .toBeGreaterThan(100);
+});
+
+test("드래그 중 슬롯 밖 사진이 고스트로 보이고, 놓으면 사라진다", async ({
+  page,
+}) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  // 가로로 긴 사진 → cover 상태에서도 슬롯 좌우로 크게 삐져나온다 (줌 불필요 — 모바일 호환)
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  // 중앙은 빨강/파랑 경계 — 어느 쪽이든 원색으로 채워졌으면 첨부 완료
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return Math.max(p.r, p.b);
+    })
+    .toBeGreaterThan(150);
+
+  // 슬롯 왼쪽 바깥(남색 배경 위) 지점 — UI 레이어(둘째 캔버스)에서 고스트 알파를 읽는다
+  const { rect } = frame01.variants.post.placements[0];
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const scale = box.width / frame01.variants.post.canvas.width;
+  const outside = {
+    x: box.x + (rect.x - 40) * scale,
+    y: box.y + (rect.y + rect.height / 2) * scale,
+  };
+  const ghostAlphaAt = () =>
+    page.evaluate(({ x, y }) => {
+      const layers = document.querySelectorAll(
+        '[data-testid="editor-canvas"] canvas',
+      );
+      const ui = layers[1] as HTMLCanvasElement; // UI 레이어
+      const b = ui.getBoundingClientRect();
+      const ratio = ui.width / b.width;
+      const d = ui
+        .getContext("2d")!
+        .getImageData(
+          Math.round((x - b.left) * ratio),
+          Math.round((y - b.top) * ratio),
+          1,
+          1,
+        ).data;
+      return { r: d[0], a: d[3] };
+    }, outside);
+
+  // 드래그 유지 상태에서 고스트 확인
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 30, center.y, { steps: 5 });
+  const during = await ghostAlphaAt();
+  expect(during.a).toBeGreaterThan(40); // 반투명 고스트 존재
+  expect(during.r).toBeGreaterThan(120); // 사진 왼쪽(빨강)의 고스트
+
+  await page.mouse.up();
+  await expect.poll(async () => (await ghostAlphaAt()).a).toBeLessThan(10); // 놓으면 사라짐
+});
+
+test("클릭 가능한 요소에 pointer 커서가 보인다", async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop-chrome",
+    "커서는 데스크톱(호버) 전용 검증",
+  );
+  await openEditor(page, "frame01");
+  // 버튼류: Tailwind v4 preflight 복원 확인
+  const toggle = page.getByRole("button", { name: "Story 9:16" });
+  expect(await toggle.evaluate((el) => getComputedStyle(el).cursor)).toBe(
+    "pointer",
+  );
+  // 비활성 다운로드 버튼은 pointer가 아니어야 한다
+  expect(
+    await page
+      .getByRole("button", { name: "다운로드" })
+      .evaluate((el) => getComputedStyle(el).cursor),
+  ).not.toBe("pointer");
+
+  // 캔버스 슬롯: 빈 슬롯 호버 → pointer
+  const center = await placementCenter(page, frame01, "post", "left");
+  await page.mouse.move(center.x, center.y);
+  // 커서는 스테이지 컨테이너(부모 div)에 걸리고 캔버스로 상속된다 — computed로 판정
+  const containerCursor = () =>
+    page.evaluate(
+      () =>
+        getComputedStyle(
+          document.querySelector(
+            '[data-testid="editor-canvas"] canvas',
+          ) as HTMLElement,
+        ).cursor,
+    );
+  await expect.poll(containerCursor).toBe("pointer");
+
+  // 사진 첨부 후 호버 → grab
+  await attachPhoto(page, center);
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+  await page.mouse.move(center.x + 5, center.y + 5);
+  await page.mouse.move(center.x, center.y);
+  await expect.poll(containerCursor).toBe("grab");
+});
+
+test("홈으로 나갔다 다시 들어오면 편집 상태가 초기화된다", async ({ page }) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  await attachPhoto(page, center);
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  await page.getByRole("link", { name: /Home/ }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.locator("main ul li a").first().click();
+  await expect(page).toHaveURL(/\/editor\/frame01$/);
+
+  // 초기화 확인: 다운로드 비활성 + 슬롯은 자리표시(무채색)로 복귀
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeDisabled();
+  const p = await pixelAt(
+    page,
+    await placementCenter(page, frame01, "post", "left"),
+  );
+  expect(p.r - p.g).toBeLessThan(60);
+});
+
 test("비율 전환 시 사진이 유지된다", async ({ page }) => {
   const errors = trackErrors(page);
   await openEditor(page, "frame01");

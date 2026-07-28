@@ -4,7 +4,6 @@ import {
   coverScale,
   decodeTargetSize,
   initialTransform,
-  MAX_ZOOM_FACTOR,
   zoomAt,
 } from "./transform";
 
@@ -29,12 +28,12 @@ describe("initialTransform", () => {
 });
 
 describe("clampTransform", () => {
-  it("스케일을 [cover, cover×3] 범위로 강제한다", () => {
+  it("스케일 하한(cover)만 강제하고 상한은 두지 않는다", () => {
     expect(clampTransform({ x: 0, y: 0, scale: 0.1 }, photo, rect).scale).toBe(
       1,
     );
     expect(clampTransform({ x: 0, y: 0, scale: 99 }, photo, rect).scale).toBe(
-      MAX_ZOOM_FACTOR,
+      99,
     );
   });
 
@@ -58,10 +57,10 @@ describe("zoomAt", () => {
     expect(zoomed.x).toBeCloseTo(focus.x - (focus.x - start.x) * 2);
   });
 
-  it("상한을 넘는 확대와 하한을 넘는 축소를 클램프한다", () => {
+  it("확대는 제한 없이 허용하고, 하한(cover) 아래 축소만 막는다", () => {
     const start = initialTransform(photo, rect);
     const over = zoomAt(start, 100, { x: 0, y: 0 }, photo, rect);
-    expect(over.scale).toBe(MAX_ZOOM_FACTOR);
+    expect(over.scale).toBe(100); // 상한 없음
     const under = zoomAt(start, 0.01, { x: 0, y: 0 }, photo, rect);
     expect(under.scale).toBe(1);
     expect(under.x).toBe(start.x); // 축소 불가 → 배치 불변

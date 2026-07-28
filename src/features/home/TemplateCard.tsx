@@ -22,12 +22,14 @@ export function TemplateCard({
         {/* 메인 카드 */}
         <div className="relative overflow-hidden rounded-3xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.1)]">
           <div className="relative overflow-hidden">
+            {/* 파생 단계에서 이미 WebP·적정 해상도로 만든 에셋 — dev 최적화기의 WebP 업스케일 행 이슈 회피 겸 우회 */}
             <Image
               src={template.preview}
               alt={template.name}
-              width={540}
-              height={675}
+              width={1080}
+              height={1350}
               priority={priority}
+              unoptimized
               className="aspect-4/5 w-full object-cover"
             />
             {/* 미리보기 하단이 흰 바와 만나는 지점의 은은한 그라디언트 */}

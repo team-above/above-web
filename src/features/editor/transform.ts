@@ -1,7 +1,7 @@
 /**
  * 슬롯 사진 배치 계산 — 스펙 03 "사진 조작".
  * 순수 함수만: 좌표계는 placement rect 원점 기준, {x, y} = 사진 좌상단 오프셋(px), scale = 원본 대비 배율.
- * 불변식: 사진이 rect를 항상 빈틈 없이 덮는다 (cover), 스케일은 cover×MAX_ZOOM_FACTOR 이하.
+ * 불변식: 사진이 rect를 항상 빈틈 없이 덮는다 (cover). 확대 상한은 없다 (기획 확정 2026-07-28).
  */
 
 export interface Size {
@@ -15,9 +15,6 @@ export interface PhotoTransform {
   scale: number;
 }
 
-/** 줌 상한 = cover 배율의 3배 (사용자 확정 2026-07-27) */
-export const MAX_ZOOM_FACTOR = 3;
-
 /** rect를 빈틈 없이 채우는 최소 배율 */
 export function coverScale(photo: Size, rect: Size): number {
   return Math.max(rect.width / photo.width, rect.height / photo.height);
@@ -28,7 +25,8 @@ const clamp = (value: number, min: number, max: number) =>
 
 /**
  * 변환을 불변식 안으로 강제한다.
- * 스케일: [cover, cover×3], 오프셋: 사진 경계가 rect 안쪽으로 들어오지 않는 범위.
+ * 스케일 하한 = cover(빈틈 금지), 상한 없음(기획 확정 2026-07-28).
+ * 오프셋은 사진 경계가 rect 안쪽으로 들어오지 않는 범위.
  */
 export function clampTransform(
   transform: PhotoTransform,
@@ -36,7 +34,7 @@ export function clampTransform(
   rect: Size,
 ): PhotoTransform {
   const minScale = coverScale(photo, rect);
-  const scale = clamp(transform.scale, minScale, minScale * MAX_ZOOM_FACTOR);
+  const scale = Math.max(transform.scale, minScale);
   const width = photo.width * scale;
   const height = photo.height * scale;
   return {
@@ -68,11 +66,7 @@ export function zoomAt(
   rect: Size,
 ): PhotoTransform {
   const minScale = coverScale(photo, rect);
-  const nextScale = clamp(
-    transform.scale * factor,
-    minScale,
-    minScale * MAX_ZOOM_FACTOR,
-  );
+  const nextScale = Math.max(transform.scale * factor, minScale);
   const ratio = nextScale / transform.scale;
   return clampTransform(
     {
