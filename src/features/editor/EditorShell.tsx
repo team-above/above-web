@@ -24,6 +24,7 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
   const setVariant = useEditorStore((s) => s.setVariant);
   const enterTemplate = useEditorStore((s) => s.enterTemplate);
   const setPhoto = useEditorStore((s) => s.setPhoto);
+  const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
   const notice = useEditorStore((s) => s.notice);
   const setNotice = useEditorStore((s) => s.setNotice);
   const exportable = useEditorStore((s) => canExport(s.photos));
@@ -61,6 +62,7 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
     if (!file || !slotId) return;
     try {
       setPhoto(slotId, await loadPhoto(file));
+      setSelectedSlot(slotId); // 첨부 직후 자동 선택 — 바로 조정 가능 (스펙 06)
     } catch (cause) {
       setError(
         cause instanceof PhotoLoadError

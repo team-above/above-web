@@ -1,6 +1,9 @@
 # 05. 사진 자유 회전
 
 - 상태: **Implemented** (2026-07-28)
+- ⚠ 회전 입력은 [스펙 06](06-selection.md)이 대체 (2026-07-28): 트위스트(두 손가락 회전) 제거 —
+  실기기에서 핀치와 충돌. 회전은 선택 후 궤도 핸들(⟳), Shift+휠은 데스크톱 보조로 유지.
+  저장 구조도 zooms[slotId] 공유 + offsets[variant][slotId]={x,y}로 재편(스펙 06)
 - 변경 (2026-07-28, 2차): **회전은 슬롯 사진의 공유 속성** — 비율(post/story) 전환에도 유지된다.
   위치·배율 조정값은 기존대로 비율별 독립(스펙 03 AC5). 저장 구조: rotations[slotId] 공유 +
   transforms[variant][slotId]={x,y,scale}, 렌더·제스처는 둘을 합성(composeTransform)해 항상 클램프

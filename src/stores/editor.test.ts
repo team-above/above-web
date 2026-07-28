@@ -18,45 +18,9 @@ describe("editor 스토어", () => {
     const next = useEditorStore.getState();
     expect(next.photos).toEqual({});
     expect(next.variant).toBe("post");
-    expect(next.transforms).toEqual({ post: {}, story: {} });
-  });
-
-  it("회전은 비율 간 공유되고, 사진 교체 시 초기화된다", () => {
-    const store = useEditorStore.getState();
-    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    store.setRotation("left", 0.7);
-    store.setVariant("story");
-    expect(useEditorStore.getState().rotations.left).toBe(0.7); // 비율 전환에도 유지
-    store.setPhoto("left", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
-    expect(useEditorStore.getState().rotations.left).toBeUndefined(); // 교체 시 무회전
-  });
-
-  it("비율 전환 시 사진과 비율별 조정값이 보존된다", () => {
-    const store = useEditorStore.getState();
-    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    store.setTransform("post", "left", {
-      x: -10,
-      y: 0,
-      scale: 1.5,
-    });
-    store.setVariant("story");
-    store.setTransform("story", "left", {
-      x: -99,
-      y: -5,
-      scale: 2,
-    });
-    const state = useEditorStore.getState();
-    expect(state.photos.left.fileName).toBe("a.jpg");
-    expect(state.transforms.post.left).toEqual({
-      x: -10,
-      y: 0,
-      scale: 1.5,
-    });
-    expect(state.transforms.story.left).toEqual({
-      x: -99,
-      y: -5,
-      scale: 2,
-    });
+    expect(next.offsets).toEqual({ post: {}, story: {} });
+    expect(next.zooms).toEqual({});
+    expect(next.selectedSlot).toBeNull();
   });
 
   it("reset은 전체 상태를 비우고 비트맵을 닫는다 (홈 복귀)", () => {
@@ -67,51 +31,65 @@ describe("editor 스토어", () => {
       fileName: "a.jpg",
     });
     store.setVariant("story");
-    store.setActiveSlot("left");
+    store.setSelectedSlot("left");
     useEditorStore.getState().reset();
     const state = useEditorStore.getState();
     expect(close).toHaveBeenCalled();
     expect(state.templateId).toBeNull();
     expect(state.photos).toEqual({});
     expect(state.variant).toBe("post");
-    expect(state.activeSlot).toBeNull();
+    expect(state.selectedSlot).toBeNull();
     expect(state.notice).toBeNull();
   });
 
-  it("activeSlot을 설정·해제한다 (고스트 표시 트리거)", () => {
-    useEditorStore.getState().setActiveSlot("left");
-    expect(useEditorStore.getState().activeSlot).toBe("left");
-    useEditorStore.getState().setActiveSlot(null);
-    expect(useEditorStore.getState().activeSlot).toBeNull();
-  });
-
-  it("사진 교체 시 해당 슬롯의 양쪽 비율 조정값을 초기화한다", () => {
+  it("회전·줌은 비율 간 공유되고, 사진 교체 시 초기화된다 (스펙 06)", () => {
     const store = useEditorStore.getState();
     store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    store.setTransform("post", "left", {
-      x: -10,
-      y: 0,
-      scale: 1.5,
-    });
-    store.setTransform("story", "left", {
-      x: -20,
-      y: 0,
-      scale: 2,
-    });
-    store.setTransform("post", "right", {
-      x: -1,
-      y: -1,
-      scale: 1.2,
-    });
+    store.setRotation("left", 0.7);
+    store.setZoom("left", 1.8);
+    store.setVariant("story");
+    expect(useEditorStore.getState().rotations.left).toBe(0.7); // 전환에도 유지
+    expect(useEditorStore.getState().zooms.left).toBe(1.8);
+    store.setPhoto("left", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
+    const state = useEditorStore.getState();
+    expect(state.rotations.left).toBeUndefined(); // 교체 시 무회전
+    expect(state.zooms.left).toBeUndefined(); // 교체 시 cover
+  });
+
+  it("오프셋은 비율별 독립 저장된다", () => {
+    const store = useEditorStore.getState();
+    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
+    store.setOffset("post", "left", { x: -10, y: 0 });
+    store.setVariant("story");
+    store.setOffset("story", "left", { x: -99, y: -5 });
+    const state = useEditorStore.getState();
+    expect(state.photos.left.fileName).toBe("a.jpg");
+    expect(state.offsets.post.left).toEqual({ x: -10, y: 0 });
+    expect(state.offsets.story.left).toEqual({ x: -99, y: -5 });
+  });
+
+  it("사진 교체 시 해당 슬롯의 양쪽 비율 오프셋을 초기화한다", () => {
+    const store = useEditorStore.getState();
+    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
+    store.setOffset("post", "left", { x: -10, y: 0 });
+    store.setOffset("story", "left", { x: -20, y: 0 });
+    store.setOffset("post", "right", { x: -1, y: -1 });
     store.setPhoto("left", { bitmap: fakeBitmap("b"), fileName: "b.jpg" });
     const state = useEditorStore.getState();
     expect(state.photos.left.fileName).toBe("b.jpg");
-    expect(state.transforms.post.left).toBeUndefined();
-    expect(state.transforms.story.left).toBeUndefined();
-    expect(state.transforms.post.right).toEqual({
-      x: -1,
-      y: -1,
-      scale: 1.2,
-    }); // 다른 슬롯 불변
+    expect(state.offsets.post.left).toBeUndefined();
+    expect(state.offsets.story.left).toBeUndefined();
+    expect(state.offsets.post.right).toEqual({ x: -1, y: -1 }); // 다른 슬롯 불변
+  });
+
+  it("선택은 토글 가능하고 비율 전환 시 자동 해제된다 (스펙 06)", () => {
+    const store = useEditorStore.getState();
+    store.setSelectedSlot("left");
+    expect(useEditorStore.getState().selectedSlot).toBe("left");
+    store.setVariant("story");
+    expect(useEditorStore.getState().selectedSlot).toBeNull();
+    store.setSelectedSlot("right");
+    store.setSelectedSlot(null);
+    expect(useEditorStore.getState().selectedSlot).toBeNull();
   });
 });

@@ -7,6 +7,8 @@ import {
   Group,
   Image as KonvaImage,
   Layer,
+  Line,
+  Path,
   Rect,
   Stage,
   Text,
@@ -18,7 +20,10 @@ import {
   clampTransform,
   composeTransform,
   rotateTo,
+  toZoom,
   zoomAt,
+  type PhotoTransform,
+  type Size,
 } from "./transform";
 import { useImageElement } from "./use-image";
 
@@ -27,10 +32,39 @@ export type ExportFn = () => HTMLCanvasElement | null;
 
 interface EditorCanvasProps {
   template: FrameTemplate;
-  /** 슬롯 탭(빈 슬롯 추가·재탭 교체 공통) → 파일 선택 트리거 */
+  /** 빈 슬롯 탭·교체(📷) 공통 — 파일 선택 트리거 */
   onSlotTap: (slotId: string) => void;
   /** EditorShell이 다운로드 시 호출할 내보내기 함수를 여기 담아준다 */
   exportRef: React.MutableRefObject<ExportFn | null>;
+}
+
+/**
+ * 슬롯의 최신 합성 변환을 읽어 updater를 적용하고 오프셋(비율별)·줌·회전(공유)으로 분해 저장한다.
+ * 윈도우 리스너(클로저)에서도 안전하도록 항상 스토어에서 최신 상태를 읽는다.
+ */
+function applySlotUpdate(
+  slot: string,
+  rect: { x: number; y: number; width: number; height: number },
+  updater: (current: PhotoTransform, size: Size) => PhotoTransform,
+) {
+  const state = useEditorStore.getState();
+  const photo = state.photos[slot];
+  if (!photo) return;
+  const size = { width: photo.bitmap.width, height: photo.bitmap.height };
+  const current = composeTransform(
+    state.offsets[state.variant][slot] ?? null,
+    state.zooms[slot] ?? 1,
+    state.rotations[slot] ?? 0,
+    size,
+    rect,
+  );
+  const next = updater(current, size);
+  state.setOffset(state.variant, slot, { x: next.x, y: next.y });
+  const zoom = toZoom(next, size, rect);
+  if (zoom !== (state.zooms[slot] ?? 1)) state.setZoom(slot, zoom);
+  if (next.rotation !== (state.rotations[slot] ?? 0)) {
+    state.setRotation(slot, next.rotation);
+  }
 }
 
 export default function EditorCanvas({
@@ -39,6 +73,7 @@ export default function EditorCanvas({
   exportRef,
 }: EditorCanvasProps) {
   const variant = useEditorStore((s) => s.variant);
+  const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -61,7 +96,7 @@ export default function EditorCanvas({
       ? fitToViewport(variant, viewport)
       : null;
 
-  // 내보내기: 스테이지를 잠시 1:1 크기로 되돌려 메인 레이어만 래스터화 (UI 배지 레이어 제외)
+  // 내보내기: 스테이지를 잠시 1:1 크기로 되돌려 메인 레이어만 래스터화 (UI·선택 레이어 제외)
   useEffect(() => {
     exportRef.current = () => {
       const stage = stageRef.current;
@@ -102,12 +137,16 @@ export default function EditorCanvas({
               scaleY={fitted.scale}
             >
               <Layer>
-                <KonvaImage image={base} listening={false} />
+                {/* base가 배경 탭을 받아 선택 해제 (슬롯이 위에서 우선한다) */}
+                <KonvaImage
+                  image={base}
+                  onPointerDown={() => setSelectedSlot(null)}
+                />
                 {variantData.placements.map((placement) => (
                   <PlacementNode
                     key={placement.slot}
                     placement={placement}
-                    onTap={() => onSlotTap(placement.slot)}
+                    onSlotTap={onSlotTap}
                     stageScale={fitted.scale}
                   />
                 ))}
@@ -122,6 +161,14 @@ export default function EditorCanvas({
                   <EmptySlotBadge key={placement.slot} placement={placement} />
                 ))}
               </Layer>
+              {/* 선택 컨트롤 레이어 — 역시 내보내기 제외, 버튼은 탭 가능 */}
+              <Layer>
+                <SelectionControls
+                  variantData={variantData}
+                  stageScale={fitted.scale}
+                  onReplace={onSlotTap}
+                />
+              </Layer>
             </Stage>
           </div>
         )}
@@ -131,25 +178,27 @@ export default function EditorCanvas({
 }
 
 /**
- * 조작 중인 슬롯의 사진 전체를 35% 투명도로 보여준다 — 슬롯 밖으로 잘리는 영역 미리보기.
+ * 선택된 슬롯의 사진 전체를 35% 투명도로 보여준다 — 슬롯 밖으로 잘리는 영역 미리보기 (스펙 06).
  * 슬롯 안쪽은 아래(메인 레이어)의 불투명 사진과 같은 픽셀이라 겹쳐도 표가 나지 않는다.
  */
 function GhostPhoto({ placement }: { placement: TemplatePlacement }) {
-  const active = useEditorStore((s) => s.activeSlot === placement.slot);
+  const selected = useEditorStore((s) => s.selectedSlot === placement.slot);
   const photo = useEditorStore((s) => s.photos[placement.slot]);
   const variant = useEditorStore((s) => s.variant);
-  const adjust = useEditorStore((s) => s.transforms[variant][placement.slot]);
+  const offset = useEditorStore((s) => s.offsets[variant][placement.slot]);
   const rotation = useEditorStore((s) => s.rotations[placement.slot] ?? 0);
-  if (!active || !photo) return null;
+  const zoom = useEditorStore((s) => s.zooms[placement.slot] ?? 1);
+  if (!selected || !photo) return null;
   const size = { width: photo.bitmap.width, height: photo.bitmap.height };
   const stored = composeTransform(
-    adjust ?? null,
+    offset ?? null,
+    zoom,
     rotation,
     size,
     placement.rect,
   );
-  const drawnW = photo.bitmap.width * stored.scale;
-  const drawnH = photo.bitmap.height * stored.scale;
+  const drawnW = size.width * stored.scale;
+  const drawnH = size.height * stored.scale;
   return (
     <KonvaImage
       image={photo.bitmap}
@@ -192,7 +241,7 @@ function EmptySlotBadge({ placement }: { placement: TemplatePlacement }) {
 
 interface PlacementNodeProps {
   placement: TemplatePlacement;
-  onTap: () => void;
+  onSlotTap: (slotId: string) => void;
   stageScale: number;
 }
 
@@ -201,31 +250,33 @@ interface GestureSession {
   /** 누적 이동량 (캔버스 좌표 단위) — 탭/드래그 판별 */
   moved: number;
   lastDist: number | null;
-  /** 두 손가락 트위스트 회전용 직전 각도 */
-  lastAngle: number | null;
   cleanup: () => void;
 }
 
-/** 사진 + 마스크(destination-in) 합성과 탭/드래그/핀치 제스처를 담당하는 슬롯 노드 */
-function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
+/** 사진 + 마스크(destination-in) 합성과 탭(선택)/드래그/핀치 제스처를 담당하는 슬롯 노드 */
+function PlacementNode({
+  placement,
+  onSlotTap,
+  stageScale,
+}: PlacementNodeProps) {
   const { rect } = placement;
   const variant = useEditorStore((s) => s.variant);
   const photo = useEditorStore((s) => s.photos[placement.slot]);
-  const adjust = useEditorStore((s) => s.transforms[variant][placement.slot]);
+  const offset = useEditorStore((s) => s.offsets[variant][placement.slot]);
   const rotation = useEditorStore((s) => s.rotations[placement.slot] ?? 0);
-  const setActiveSlot = useEditorStore((s) => s.setActiveSlot);
+  const zoom = useEditorStore((s) => s.zooms[placement.slot] ?? 1);
+  const selected = useEditorStore((s) => s.selectedSlot === placement.slot);
+  const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
 
   const mask = useImageElement(placement.mask);
   const groupRef = useRef<Konva.Group>(null);
-  // 휠 줌은 이벤트가 이산적이라 잠깐 뒤에 고스트를 끈다
-  const wheelIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const photoSize = photo
     ? { width: photo.bitmap.width, height: photo.bitmap.height }
     : null;
-  // 비율별 조정값 + 공유 회전 합성 — 조정값이 없어도(비율 첫 진입) 항상 유효한 변환이 나온다
+  // 비율별 오프셋 + 공유 줌·회전 합성 — 오프셋이 없어도(비율 첫 진입) 항상 유효한 변환이 나온다
   const stored = photoSize
-    ? composeTransform(adjust ?? null, rotation, photoSize, rect)
+    ? composeTransform(offset ?? null, zoom, rotation, photoSize, rect)
     : null;
 
   // 마스크 합성(destination-in)은 그룹 캐시 안에서만 적용되어야 레이어 전체를 지우지 않는다
@@ -253,13 +304,7 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
   ]);
 
   const sessionRef = useRef<GestureSession | null>(null);
-  useEffect(
-    () => () => {
-      sessionRef.current?.cleanup();
-      if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
-    },
-    [],
-  );
+  useEffect(() => () => sessionRef.current?.cleanup(), []);
 
   const toLocal = (clientX: number, clientY: number) => {
     const box = groupRef.current
@@ -272,117 +317,64 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
     };
   };
 
-  /** 데스크톱 커서 힌트 — 빈 슬롯 pointer, 사진 있으면 grab, 드래그 중 grabbing */
+  /** 데스크톱 커서 힌트 — 미선택 pointer(탭 유도), 선택됨 grab, 드래그 중 grabbing */
   const setCursor = (cursor: string) => {
     const container = groupRef.current?.getStage()?.container();
     if (container) container.style.cursor = cursor;
   };
-  const hoverCursor = () => setCursor(photo ? "grab" : "pointer");
+  const hoverCursor = () => setCursor(photo && selected ? "grab" : "pointer");
   const hoveredRef = useRef(false);
-  // 파일 선택 직후처럼 경계 이동 없이 사진 상태만 바뀐 경우에도 커서를 갱신한다
-  const hasPhoto = Boolean(photo);
+  const hoverKey = `${Boolean(photo)}:${selected}`;
   useEffect(() => {
-    if (hoveredRef.current && !sessionRef.current) {
-      setCursor(hasPhoto ? "grab" : "pointer");
-    }
-  }, [hasPhoto]);
+    if (hoveredRef.current && !sessionRef.current) hoverCursor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoverKey]);
 
-  /**
-   * 드래그/줌 적용 — 윈도우 리스너(세션 생성 시점 클로저)에서 호출되므로
-   * 반드시 스토어에서 최신 상태를 읽는다. 렌더 클로저의 stored를 쓰면 이동이 누적되지 않는다.
-   */
-  const readCurrent = () => {
-    const state = useEditorStore.getState();
-    const currentPhoto = state.photos[placement.slot];
-    if (!currentPhoto) return null;
-    const size = {
-      width: currentPhoto.bitmap.width,
-      height: currentPhoto.bitmap.height,
-    };
-    const current = composeTransform(
-      state.transforms[state.variant][placement.slot] ?? null,
-      state.rotations[placement.slot] ?? 0,
-      size,
-      rect,
-    );
-    return { state, current, size };
-  };
-
-  const writeBack = (
-    snapshot: NonNullable<ReturnType<typeof readCurrent>>,
-    next: { x: number; y: number; scale: number; rotation: number },
-  ) => {
-    snapshot.state.setTransform(snapshot.state.variant, placement.slot, {
-      x: next.x,
-      y: next.y,
-      scale: next.scale,
-    });
-    if (next.rotation !== snapshot.current.rotation) {
-      snapshot.state.setRotation(placement.slot, next.rotation);
-    }
-  };
+  const isSelected = () =>
+    useEditorStore.getState().selectedSlot === placement.slot;
 
   const applyDrag = (dx: number, dy: number) => {
-    const snapshot = readCurrent();
-    if (!snapshot) return;
-    writeBack(
-      snapshot,
+    if (!isSelected()) return; // 조작은 선택 상태에서만 (스펙 06)
+    applySlotUpdate(placement.slot, rect, (current, size) =>
       clampTransform(
-        {
-          ...snapshot.current,
-          x: snapshot.current.x + dx,
-          y: snapshot.current.y + dy,
-        },
-        snapshot.size,
+        { ...current, x: current.x + dx, y: current.y + dy },
+        size,
         rect,
       ),
     );
   };
 
   const applyZoom = (factor: number, focus: { x: number; y: number }) => {
-    const snapshot = readCurrent();
-    if (!snapshot) return;
-    writeBack(
-      snapshot,
-      zoomAt(snapshot.current, factor, focus, snapshot.size, rect),
+    if (!isSelected()) return;
+    applySlotUpdate(placement.slot, rect, (current, size) =>
+      zoomAt(current, factor, focus, size, rect),
     );
   };
 
-  const applyRotate = (deltaRadians: number) => {
-    const snapshot = readCurrent();
-    if (!snapshot) return;
-    writeBack(
-      snapshot,
-      rotateTo(
-        snapshot.current,
-        snapshot.current.rotation + deltaRadians,
-        snapshot.size,
-        rect,
-      ),
+  const applyRotateDelta = (deltaRadians: number) => {
+    if (!isSelected()) return;
+    applySlotUpdate(placement.slot, rect, (current, size) =>
+      rotateTo(current, current.rotation + deltaRadians, size, rect),
     );
   };
 
   /**
    * 제스처 세션 — 시작한 슬롯이 끝까지 소유한다 (윈도우 리스너로 포인터 캡처 의미론).
-   * 슬롯 밖으로 나가도 드래그가 이어지고, 이웃 슬롯 위에서 놓아도 그 슬롯이 탭으로 오인하지 않는다.
+   * 탭 = 선택 토글(사진) 또는 파일 선택(빈 슬롯). 드래그/핀치는 선택된 슬롯만 반응한다.
    */
   const startSession = (e: Konva.KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault();
     const point = { x: e.evt.clientX, y: e.evt.clientY };
     const existing = sessionRef.current;
     if (existing) {
-      // 두 번째 손가락 → 핀치/트위스트 모드 진입 (드래그로 오인 금지)
+      // 두 번째 손가락 → 핀치 모드 진입 (드래그·탭 오인 금지)
       existing.pointers.set(e.evt.pointerId, point);
       existing.lastDist = null;
-      existing.lastAngle = null;
       existing.moved = 99;
       return;
     }
     const pointers = new Map([[e.evt.pointerId, point]]);
-    // 휠 유휴 타이머가 드래그 세션 중 고스트를 꺼버리지 않게 취소
-    if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
-    setActiveSlot(placement.slot); // 조작 시작 → 슬롯 밖 고스트 표시
-    if (photo) setCursor("grabbing");
+    if (photo && selected) setCursor("grabbing");
     const onMove = (ev: PointerEvent) => {
       const s = sessionRef.current;
       if (!s || !s.pointers.has(ev.pointerId)) return;
@@ -396,19 +388,13 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
       } else if (s.pointers.size === 2) {
         const [a, b] = [...s.pointers.values()];
         const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        const angle = Math.atan2(b.y - a.y, b.x - a.x);
         if (s.lastDist !== null && s.lastDist > 0) {
           applyZoom(
             dist / s.lastDist,
             toLocal((a.x + b.x) / 2, (a.y + b.y) / 2),
           );
         }
-        if (s.lastAngle !== null) {
-          // 두 손가락 트위스트 = 자유 회전 (스펙 05)
-          applyRotate(angle - s.lastAngle);
-        }
         s.lastDist = dist;
-        s.lastAngle = angle;
       }
     };
     const onUp = (ev: PointerEvent) => {
@@ -416,14 +402,18 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
       if (!s || !s.pointers.has(ev.pointerId)) return;
       s.pointers.delete(ev.pointerId);
       s.lastDist = null;
-      s.lastAngle = null;
       if (s.pointers.size > 0) return;
       s.cleanup();
       sessionRef.current = null;
-      setActiveSlot(null); // 조작 종료 → 고스트 숨김
-      hoverCursor(); // 드래그 종료 후 커서 복원 (슬롯 밖이면 다음 이동에서 leave가 정리)
-      // 이동이 거의 없으면 탭 — 빈 슬롯은 추가, 사진 있으면 교체 (사용자 확정 A안)
-      if (s.moved < 6) onTap();
+      hoverCursor();
+      // 이동이 거의 없으면 탭 — 사진은 선택 토글, 빈 슬롯은 파일 선택 (스펙 06)
+      if (s.moved < 6) {
+        if (photo) {
+          setSelectedSlot(selected ? null : placement.slot);
+        } else {
+          onSlotTap(placement.slot);
+        }
+      }
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", onMove);
@@ -433,13 +423,7 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-    sessionRef.current = {
-      pointers,
-      moved: 0,
-      lastDist: null,
-      lastAngle: null,
-      cleanup,
-    };
+    sessionRef.current = { pointers, moved: 0, lastDist: null, cleanup };
   };
 
   return (
@@ -461,18 +445,14 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
         onPointerDown={startSession}
         onWheel={(e) => {
           e.evt.preventDefault();
-          setActiveSlot(placement.slot);
-          if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
-          wheelIdleTimer.current = setTimeout(() => {
-            if (!sessionRef.current) setActiveSlot(null);
-          }, 500);
+          if (!isSelected()) return; // 조작은 선택 상태에서만
           // Shift를 누르면 휠 델타가 deltaX로 오는 환경(macOS 등)이 있다
           const delta =
             Math.abs(e.evt.deltaY) >= Math.abs(e.evt.deltaX)
               ? e.evt.deltaY
               : e.evt.deltaX;
           if (e.evt.shiftKey) {
-            applyRotate(delta * 0.002); // Shift+휠 = 자유 회전 (스펙 05)
+            applyRotateDelta(delta * 0.002); // Shift+휠 = 자유 회전 (데스크톱 보조)
           } else {
             applyZoom(
               Math.exp(-delta * 0.002),
@@ -501,6 +481,213 @@ function PlacementNode({ placement, onTap, stageScale }: PlacementNodeProps) {
           />
         </>
       )}
+    </Group>
+  );
+}
+
+/** lucide 아이콘 패스 (24×24 기준) */
+const CAMERA_PATHS = [
+  "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z",
+  "M12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+];
+const ROTATE_PATHS = [
+  "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8",
+  "M21 3v5h-5",
+];
+
+interface SelectionControlsProps {
+  variantData: FrameTemplate["variants"]["post"];
+  stageScale: number;
+  onReplace: (slotId: string) => void;
+}
+
+/** 선택 테두리 + ✕(해제)·📷(교체)·⟳(궤도 회전 핸들) 오버레이 (스펙 06) */
+function SelectionControls({
+  variantData,
+  stageScale,
+  onReplace,
+}: SelectionControlsProps) {
+  const selected = useEditorStore((s) => s.selectedSlot);
+  const photo = useEditorStore((s) =>
+    selected ? s.photos[selected] : undefined,
+  );
+  const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
+  const groupRef = useRef<Konva.Group>(null);
+  const rotateSession = useRef<{ cleanup: () => void } | null>(null);
+  useEffect(() => () => rotateSession.current?.cleanup(), []);
+
+  const placement = variantData.placements.find((p) => p.slot === selected);
+  if (!placement || !photo || !selected) return null;
+  const { rect } = placement;
+  const { width: canvasW, height: canvasH } = variantData.canvas;
+  /** 화면 픽셀 크기 고정용 — 스테이지 스케일 역산 */
+  const px = (n: number) => n / stageScale;
+  const clampX = (v: number) => Math.min(Math.max(v, px(22)), canvasW - px(22));
+  const clampY = (v: number) => Math.min(Math.max(v, px(22)), canvasH - px(22));
+
+  const closeX = clampX(rect.x + rect.width);
+  const closeY = clampY(rect.y);
+  // 📷는 슬롯 아래 바깥 — 작은 슬롯에서 사진 위 탭/드래그를 가리지 않는다 (⟳와 대칭)
+  const cameraX = clampX(rect.x + rect.width / 2);
+  const cameraY = clampY(rect.y + rect.height + px(32));
+  const rotateX = clampX(rect.x + rect.width / 2);
+  const rotateY = clampY(rect.y - px(32));
+
+  /** 궤도 회전 — 핸들을 잡고 슬롯 중심을 축으로 원을 그리듯 드래그 */
+  const startOrbit = (e: Konva.KonvaEventObject<PointerEvent>) => {
+    e.evt.preventDefault();
+    e.cancelBubble = true;
+    const stage = groupRef.current?.getStage();
+    const box = stage?.container().getBoundingClientRect();
+    if (!box) return;
+    const center = {
+      x: box.left + (rect.x + rect.width / 2) * stageScale,
+      y: box.top + (rect.y + rect.height / 2) * stageScale,
+    };
+    const startPointer = Math.atan2(
+      e.evt.clientY - center.y,
+      e.evt.clientX - center.x,
+    );
+    const startRotation = useEditorStore.getState().rotations[selected] ?? 0;
+    const onMove = (ev: PointerEvent) => {
+      const angle = Math.atan2(ev.clientY - center.y, ev.clientX - center.x);
+      applySlotUpdate(selected, rect, (current, size) =>
+        rotateTo(current, startRotation + (angle - startPointer), size, rect),
+      );
+    };
+    const onUp = () => {
+      rotateSession.current?.cleanup();
+      rotateSession.current = null;
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    rotateSession.current = { cleanup };
+  };
+
+  const iconScale = px(15) / 24;
+
+  return (
+    <Group ref={groupRef}>
+      {/* 선택 테두리 — 슬롯 rect에 여백 없이 딱 붙는다 */}
+      <Rect
+        x={rect.x}
+        y={rect.y}
+        width={rect.width}
+        height={rect.height}
+        stroke="#ffffff"
+        strokeWidth={px(3)}
+        shadowColor="rgba(0,0,0,0.4)"
+        shadowBlur={px(4)}
+        listening={false}
+      />
+      {/* ✕ 해제 (우상단) */}
+      <Group
+        name="deselect-button"
+        x={closeX}
+        y={closeY}
+        onPointerDown={(e) => {
+          e.evt.preventDefault();
+          e.cancelBubble = true;
+          setSelectedSlot(null);
+        }}
+        onMouseEnter={() => {
+          const c = groupRef.current?.getStage()?.container();
+          if (c) c.style.cursor = "pointer";
+        }}
+      >
+        <Circle
+          radius={px(16)}
+          fill="#1c1c1e"
+          shadowColor="rgba(0,0,0,0.3)"
+          shadowBlur={px(4)}
+        />
+        <Line
+          points={[-px(5), -px(5), px(5), px(5)]}
+          stroke="#ffffff"
+          strokeWidth={px(2.2)}
+          lineCap="round"
+        />
+        <Line
+          points={[-px(5), px(5), px(5), -px(5)]}
+          stroke="#ffffff"
+          strokeWidth={px(2.2)}
+          lineCap="round"
+        />
+      </Group>
+      {/* 📷 교체 (하단 중앙) */}
+      <Group
+        name="replace-button"
+        x={cameraX}
+        y={cameraY}
+        onPointerDown={(e) => {
+          e.evt.preventDefault();
+          e.cancelBubble = true;
+          onReplace(selected);
+        }}
+        onMouseEnter={() => {
+          const c = groupRef.current?.getStage()?.container();
+          if (c) c.style.cursor = "pointer";
+        }}
+      >
+        <Circle
+          radius={px(18)}
+          fill="#ffffff"
+          shadowColor="rgba(0,0,0,0.25)"
+          shadowBlur={px(5)}
+        />
+        {CAMERA_PATHS.map((data) => (
+          <Path
+            key={data}
+            data={data}
+            x={-12 * iconScale}
+            y={-12 * iconScale}
+            scaleX={iconScale}
+            scaleY={iconScale}
+            stroke="#1c1c1e"
+            strokeWidth={2}
+            lineCap="round"
+            lineJoin="round"
+          />
+        ))}
+      </Group>
+      {/* ⟳ 궤도 회전 핸들 (상단 중앙) */}
+      <Group
+        name="rotate-handle"
+        x={rotateX}
+        y={rotateY}
+        onPointerDown={startOrbit}
+        onMouseEnter={() => {
+          const c = groupRef.current?.getStage()?.container();
+          if (c) c.style.cursor = "grab";
+        }}
+      >
+        <Circle
+          radius={px(16)}
+          fill="#ffffff"
+          shadowColor="rgba(0,0,0,0.25)"
+          shadowBlur={px(5)}
+        />
+        {ROTATE_PATHS.map((data) => (
+          <Path
+            key={data}
+            data={data}
+            x={-12 * iconScale}
+            y={-12 * iconScale}
+            scaleX={iconScale}
+            scaleY={iconScale}
+            stroke="#1c1c1e"
+            strokeWidth={2.4}
+            lineCap="round"
+            lineJoin="round"
+          />
+        ))}
+      </Group>
     </Group>
   );
 }

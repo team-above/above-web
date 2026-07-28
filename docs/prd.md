@@ -69,6 +69,7 @@
 | 03 에디터 (슬롯·비율·조작)              | Implemented |
 | 04 내보내기 (PNG 다운로드)              | Implemented |
 | 05 사진 자유 회전                       | Implemented |
+| 06 선택 기반 편집 (탭 선택·오버레이)    | Implemented |
 
 ## 7. 마일스톤
 

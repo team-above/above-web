@@ -17,11 +17,10 @@ export interface PhotoTransform {
   rotation: number;
 }
 
-/** 비율별로 독립 저장되는 조정값 — 회전은 사진 속성으로 비율 간 공유된다 (스펙 05 변경) */
-export interface PlacementAdjust {
+/** 비율별로 독립 저장되는 오프셋 — 회전·줌은 사진 속성으로 비율 간 공유된다 (스펙 06) */
+export interface SlotOffset {
   x: number;
   y: number;
-  scale: number;
 }
 
 /** 90° 자석 스냅 임계 (±3°) */
@@ -88,17 +87,28 @@ export function initialTransform(photo: Size, rect: Size): PhotoTransform {
 }
 
 /**
- * 비율별 조정값(없으면 중앙 cover) + 공유 회전을 합성해 항상 클램프된 변환을 만든다.
- * 비율 전환 직후처럼 조정값이 없거나 회전 대비 배율이 부족한 경우를 모두 흡수한다.
+ * 비율별 오프셋(없으면 중앙) + 공유 줌·회전을 합성해 항상 클램프된 변환을 만든다.
+ * 실제 배율 = minScale(θ, rect) × zoom — 비율 전환 시 각도·확대감이 그대로 유지된다 (스펙 06).
  */
 export function composeTransform(
-  adjust: PlacementAdjust | null,
+  offset: SlotOffset | null,
+  zoom: number,
   rotation: number,
   photo: Size,
   rect: Size,
 ): PhotoTransform {
-  const base = adjust ?? { x: 0, y: 0, scale: 0 }; // scale 0 → 클램프가 minScale(θ)로 올린다
-  return clampTransform({ ...base, rotation }, photo, rect);
+  const scale = minScaleFor(photo, rect, rotation) * Math.max(zoom, 1);
+  const base = offset ?? { x: 0, y: 0 };
+  return clampTransform({ ...base, scale, rotation }, photo, rect);
+}
+
+/** 변환에서 공유 줌(cover 대비 상대 배율)을 역산한다 — 제스처 결과 저장용 */
+export function toZoom(
+  transform: PhotoTransform,
+  photo: Size,
+  rect: Size,
+): number {
+  return transform.scale / minScaleFor(photo, rect, transform.rotation);
 }
 
 /**

@@ -148,26 +148,32 @@ describe("snapAngle / rotateTo", () => {
   });
 });
 
-describe("composeTransform", () => {
-  it("조정값이 없으면 중앙 cover(해당 각도)로 만든다 — 비율 첫 진입", async () => {
+describe("composeTransform / toZoom", () => {
+  it("오프셋이 없으면 중앙, 배율 = minScale(θ)×zoom — 비율 전환 시 확대감 유지의 근거", async () => {
     const { composeTransform } = await import("./transform");
-    const t = composeTransform(null, 0, photo, rect);
-    expect(t).toEqual({ x: 0, y: 0, scale: 1, rotation: 0 });
-    const rotated = composeTransform(null, 45 * DEG, photo, rect);
-    expect(rotated.rotation).toBeCloseTo(45 * DEG);
-    expect(rotated.scale).toBeCloseTo(minScaleFor(photo, rect, 45 * DEG));
+    expect(composeTransform(null, 1, 0, photo, rect)).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+    });
+    const zoomed = composeTransform(null, 2, 0, photo, rect);
+    expect(zoomed.scale).toBe(2); // cover×2
+    const rotated = composeTransform(null, 1.5, 45 * DEG, photo, rect);
+    expect(rotated.scale).toBeCloseTo(minScaleFor(photo, rect, 45 * DEG) * 1.5);
   });
 
-  it("조정값이 있으면 공유 회전과 합성하고 부족한 배율은 끌어올린다", async () => {
+  it("zoom 1 미만은 cover로 방어하고, 오프셋은 클램프된다", async () => {
     const { composeTransform } = await import("./transform");
-    const t = composeTransform(
-      { x: 50, y: 0, scale: 1 },
-      45 * DEG,
-      photo,
-      rect,
-    );
-    expect(t.rotation).toBeCloseTo(45 * DEG);
-    expect(t.scale).toBeCloseTo(minScaleFor(photo, rect, 45 * DEG)); // 1 → 각도 최소치로 상승
+    const t = composeTransform({ x: 999, y: 0 }, 0.5, 0, photo, rect);
+    expect(t.scale).toBe(1); // zoom<1 → cover
+    expect(t.x).toBe(100); // 가로 여유 한계로 클램프
+  });
+
+  it("toZoom은 변환에서 공유 줌을 역산한다 (compose와 왕복 일치)", async () => {
+    const { composeTransform, toZoom } = await import("./transform");
+    const t = composeTransform(null, 1.8, 30 * DEG, photo, rect);
+    expect(toZoom(t, photo, rect)).toBeCloseTo(1.8);
   });
 });
 

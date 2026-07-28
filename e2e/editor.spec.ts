@@ -254,18 +254,37 @@ test("드래그로 사진이 실제로 이동한다 (누적 이동)", async ({ p
     .toBeGreaterThan(100);
 });
 
-test("드래그 중 슬롯 밖 사진이 고스트로 보이고, 놓으면 사라진다", async ({
+/** UI 레이어(둘째 캔버스)의 특정 지점 알파/색 — 고스트 검증용 */
+async function ghostAt(page: Page, point: { x: number; y: number }) {
+  return page.evaluate(({ x, y }) => {
+    const layers = document.querySelectorAll(
+      '[data-testid="editor-canvas"] canvas',
+    );
+    const ui = layers[1] as HTMLCanvasElement;
+    const b = ui.getBoundingClientRect();
+    const ratio = ui.width / b.width;
+    const d = ui
+      .getContext("2d")!
+      .getImageData(
+        Math.round((x - b.left) * ratio),
+        Math.round((y - b.top) * ratio),
+        1,
+        1,
+      ).data;
+    return { r: d[0], a: d[3] };
+  }, point);
+}
+
+test("선택하면 고스트·테두리가 보이고, 배경 탭으로 해제된다 (스펙 06)", async ({
   page,
 }) => {
   await openEditor(page, "frame01");
   const center = await placementCenter(page, frame01, "post", "left");
-  // 가로로 긴 사진 → cover 상태에서도 슬롯 좌우로 크게 삐져나온다 (줌 불필요 — 모바일 호환)
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
   await (
     await chooserPromise
   ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
-  // 중앙은 빨강/파랑 경계 — 어느 쪽이든 원색으로 채워졌으면 첨부 완료
   await expect
     .poll(async () => {
       const p = await pixelAt(page, center);
@@ -273,7 +292,7 @@ test("드래그 중 슬롯 밖 사진이 고스트로 보이고, 놓으면 사�
     })
     .toBeGreaterThan(150);
 
-  // 슬롯 왼쪽 바깥(남색 배경 위) 지점 — UI 레이어(둘째 캔버스)에서 고스트 알파를 읽는다
+  // 첨부 직후 자동 선택 → 슬롯 왼쪽 바깥에 고스트(빨강)가 보인다
   const { rect } = frame01.variants.post.placements[0];
   const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
   const box = (await canvas.boundingBox())!;
@@ -282,35 +301,160 @@ test("드래그 중 슬롯 밖 사진이 고스트로 보이고, 놓으면 사�
     x: box.x + (rect.x - 40) * scale,
     y: box.y + (rect.y + rect.height / 2) * scale,
   };
-  const ghostAlphaAt = () =>
-    page.evaluate(({ x, y }) => {
-      const layers = document.querySelectorAll(
-        '[data-testid="editor-canvas"] canvas',
-      );
-      const ui = layers[1] as HTMLCanvasElement; // UI 레이어
-      const b = ui.getBoundingClientRect();
-      const ratio = ui.width / b.width;
-      const d = ui
-        .getContext("2d")!
-        .getImageData(
-          Math.round((x - b.left) * ratio),
-          Math.round((y - b.top) * ratio),
-          1,
-          1,
-        ).data;
-      return { r: d[0], a: d[3] };
-    }, outside);
+  await expect
+    .poll(async () => (await ghostAt(page, outside)).a)
+    .toBeGreaterThan(40);
+  expect((await ghostAt(page, outside)).r).toBeGreaterThan(120);
 
-  // 드래그 유지 상태에서 고스트 확인
+  // 배경(슬롯 밖 남색 영역) 탭 → 선택 해제 → 고스트 사라짐
+  await page.mouse.click(box.x + 60 * scale, box.y + 60 * scale);
+  await expect
+    .poll(async () => (await ghostAt(page, outside)).a)
+    .toBeLessThan(10);
+
+  // 사진 재탭 → 다시 선택(고스트), 한 번 더 탭 → 해제 (토글)
+  await page.mouse.click(center.x, center.y);
+  await expect
+    .poll(async () => (await ghostAt(page, outside)).a)
+    .toBeGreaterThan(40);
+  await page.mouse.click(center.x, center.y);
+  await expect
+    .poll(async () => (await ghostAt(page, outside)).a)
+    .toBeLessThan(10);
+});
+
+/** 선택 오버레이 버튼의 화면 좌표 (SelectionControls의 배치 로직 재현) */
+async function selectionButtons(page: Page, slotIndex = 0) {
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const v = frame01.variants.post;
+  const rect = v.placements[slotIndex].rect;
+  const s = box.width / v.canvas.width;
+  const pxc = (n: number) => n / s; // 화면 n px에 해당하는 캔버스 단위
+  const cx = (val: number) =>
+    Math.min(Math.max(val, pxc(22)), v.canvas.width - pxc(22));
+  const cy = (val: number) =>
+    Math.min(Math.max(val, pxc(22)), v.canvas.height - pxc(22));
+  const toScreen = (x: number, y: number) => ({
+    x: box.x + x * s,
+    y: box.y + y * s,
+  });
+  return {
+    close: toScreen(cx(rect.x + rect.width), cy(rect.y)),
+    camera: toScreen(
+      cx(rect.x + rect.width / 2),
+      cy(rect.y + rect.height + pxc(32)),
+    ),
+    rotate: toScreen(cx(rect.x + rect.width / 2), cy(rect.y - pxc(32))),
+    slotCenterScreen: toScreen(
+      rect.x + rect.width / 2,
+      rect.y + rect.height / 2,
+    ),
+  };
+}
+
+test("✕로 해제, 📷로 교체 파일 선택이 열린다 (스펙 06)", async ({ page }) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  await attachPhoto(page, center); // 자동 선택
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  const buttons = await selectionButtons(page);
+  // 📷 → 파일 선택 열림 (선택 유지)
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(buttons.camera.x, buttons.camera.y);
+  const chooser = await chooserPromise;
+  await chooser.setFiles(FIXTURE); // 교체 (자동 선택 유지)
+
+  // ✕ → 해제: 고스트 사라짐으로 판정
+  const { rect } = frame01.variants.post.placements[0];
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const scale = box.width / frame01.variants.post.canvas.width;
+  const probe = {
+    x: box.x + (rect.x + 4) * scale,
+    y: box.y + (rect.y + rect.height / 2) * scale,
+  };
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeGreaterThan(40); // 교체 후에도 선택 상태(고스트)
+  await page.mouse.click(buttons.close.x, buttons.close.y);
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeLessThan(10);
+});
+
+test("궤도 핸들 드래그로 회전한다 (90° 스냅)", async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop-chrome",
+    "마우스 궤도 드래그는 데스크톱에서 검증 (코드 경로는 동일)",
+  );
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  const buttons = await selectionButtons(page);
+  const c = buttons.slotCenterScreen;
+  const radius = Math.hypot(buttons.rotate.x - c.x, buttons.rotate.y - c.y);
+  // 핸들(위쪽)에서 시작해 시계 방향으로 동쪽(+90°)까지 원을 그리며 드래그
+  await page.mouse.move(buttons.rotate.x, buttons.rotate.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) {
+    const theta = -Math.PI / 2 + (i / 8) * (Math.PI / 2);
+    await page.mouse.move(
+      c.x + radius * Math.cos(theta),
+      c.y + radius * Math.sin(theta),
+    );
+  }
+  await page.mouse.up();
+
+  // +90° 회전: 사진 왼쪽(빨강)이 슬롯 위쪽으로 온다
+  const { rect } = frame01.variants.post.placements[0];
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const scale = box.width / frame01.variants.post.canvas.width;
+  const top = await pixelAt(page, {
+    x: box.x + (rect.x + rect.width / 2) * scale,
+    y: box.y + (rect.y + 20) * scale,
+  });
+  const bottom = await pixelAt(page, {
+    x: box.x + (rect.x + rect.width / 2) * scale,
+    y: box.y + (rect.y + rect.height - 20) * scale,
+  });
+  expect(top.r - top.b).toBeGreaterThan(100);
+  expect(bottom.b - bottom.r).toBeGreaterThan(100);
+});
+
+test("미선택 사진은 드래그해도 움직이지 않는다 (스펙 06)", async ({ page }) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  // 배경 탭으로 해제 후 드래그 시도
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const scale = box.width / frame01.variants.post.canvas.width;
+  await page.mouse.click(box.x + 60 * scale, box.y + 60 * scale);
+
+  const before = await pixelAt(page, center);
   await page.mouse.move(center.x, center.y);
   await page.mouse.down();
-  await page.mouse.move(center.x + 30, center.y, { steps: 5 });
-  const during = await ghostAlphaAt();
-  expect(during.a).toBeGreaterThan(40); // 반투명 고스트 존재
-  expect(during.r).toBeGreaterThan(120); // 사진 왼쪽(빨강)의 고스트
-
+  await page.mouse.move(center.x + 200, center.y, { steps: 8 });
   await page.mouse.up();
-  await expect.poll(async () => (await ghostAlphaAt()).a).toBeLessThan(10); // 놓으면 사라짐
+  const after = await pixelAt(page, center);
+  // 미선택 → 위치 불변 (중앙 경계색 그대로)
+  expect(Math.abs(after.r - before.r)).toBeLessThan(25);
+  expect(Math.abs(after.b - before.b)).toBeLessThan(25);
 });
 
 test("클릭 가능한 요소에 pointer 커서가 보인다", async ({ page }, testInfo) => {

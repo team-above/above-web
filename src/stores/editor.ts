@@ -1,9 +1,9 @@
 /**
- * 에디터 상태 — 스펙 03. 서버 저장 없음(새로고침 시 초기화).
- * 사진은 슬롯 단위로 비율(variant)과 무관하게 공유하고, 배치 transform은 비율별로 독립 저장한다.
+ * 에디터 상태 — 스펙 03/05/06. 서버 저장 없음(새로고침 시 초기화).
+ * 사진·회전·줌은 슬롯 단위로 비율(variant)과 무관하게 공유하고, 오프셋만 비율별로 독립 저장한다.
  */
 import { create } from "zustand";
-import type { PlacementAdjust } from "@/features/editor/transform";
+import type { SlotOffset } from "@/features/editor/transform";
 import type { VariantId } from "@/templates/schema";
 
 export interface SlotPhoto {
@@ -16,30 +16,30 @@ interface EditorState {
   templateId: string | null;
   variant: VariantId;
   photos: Record<string, SlotPhoto>;
-  transforms: Record<VariantId, Record<string, PlacementAdjust>>;
-  /** 슬롯별 회전(라디안) — 사진 속성이라 비율 간 공유된다 (스펙 05 변경 2026-07-28) */
+  /** 비율별 독립 오프셋 (스펙 06 — 배율·회전은 공유) */
+  offsets: Record<VariantId, Record<string, SlotOffset>>;
+  /** 슬롯별 회전(라디안) — 사진 속성, 비율 간 공유 */
   rotations: Record<string, number>;
-  /** 지금 조작(드래그/핀치/휠) 중인 슬롯 — 슬롯 밖 고스트 표시용 */
-  activeSlot: string | null;
+  /** 슬롯별 줌(cover 대비 상대 배율 ≥1) — 사진 속성, 비율 간 공유 */
+  zooms: Record<string, number>;
+  /** 선택된 슬롯 — 테두리·고스트·오버레이 컨트롤 표시, 조작 허용 (스펙 06) */
+  selectedSlot: string | null;
   /** 하단 토스트 안내 (예: 저장 완료) — 라우트 이동에도 유지되도록 스토어에 둔다 */
   notice: string | null;
   /** 템플릿 진입 시 호출 — 다른 템플릿이면 전체 초기화 */
   enterTemplate: (templateId: string) => void;
   setVariant: (variant: VariantId) => void;
   setPhoto: (slotId: string, photo: SlotPhoto) => void;
-  setTransform: (
-    variant: VariantId,
-    slotId: string,
-    adjust: PlacementAdjust,
-  ) => void;
+  setOffset: (variant: VariantId, slotId: string, offset: SlotOffset) => void;
   setRotation: (slotId: string, rotation: number) => void;
-  setActiveSlot: (slotId: string | null) => void;
+  setZoom: (slotId: string, zoom: number) => void;
+  setSelectedSlot: (slotId: string | null) => void;
   setNotice: (message: string | null) => void;
   /** 에디터를 떠날 때(홈 복귀) 호출 — 전체 초기화. 에디터↔done 왕복은 유지된다 */
   reset: () => void;
 }
 
-const emptyTransforms = (): EditorState["transforms"] => ({
+const emptyOffsets = (): EditorState["offsets"] => ({
   post: {},
   story: {},
 });
@@ -52,9 +52,10 @@ function releaseAndClear(state: { photos: Record<string, SlotPhoto> }) {
   return {
     variant: "post" as const,
     photos: {},
-    transforms: emptyTransforms(),
+    offsets: emptyOffsets(),
     rotations: {},
-    activeSlot: null,
+    zooms: {},
+    selectedSlot: null,
     notice: null,
   };
 }
@@ -63,9 +64,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   templateId: null,
   variant: "post",
   photos: {},
-  transforms: emptyTransforms(),
+  offsets: emptyOffsets(),
   rotations: {},
-  activeSlot: null,
+  zooms: {},
+  selectedSlot: null,
   notice: null,
   enterTemplate: (templateId) =>
     set((state) =>
@@ -75,32 +77,38 @@ export const useEditorStore = create<EditorState>((set) => ({
     ),
   reset: () =>
     set((state) => ({ templateId: null, ...releaseAndClear(state) })),
-  setActiveSlot: (slotId) => set({ activeSlot: slotId }),
+  // 비율 전환 시 선택 해제 (스펙 06)
+  setVariant: (variant) => set({ variant, selectedSlot: null }),
+  setSelectedSlot: (slotId) => set({ selectedSlot: slotId }),
   setNotice: (message) => set({ notice: message }),
-  setVariant: (variant) => set({ variant }),
   setPhoto: (slotId, photo) =>
     set((state) => {
       state.photos[slotId]?.bitmap.close?.(); // 교체 시 기존 비트맵 메모리 반환
       return {
         photos: { ...state.photos, [slotId]: photo },
-        // 사진이 바뀌면 배치·회전 모두 무효 — 제거해 cover·무회전 초기화 유도
-        transforms: {
-          post: omit(state.transforms.post, slotId),
-          story: omit(state.transforms.story, slotId),
+        // 사진이 바뀌면 배치·회전·줌 모두 무효 — 제거해 cover·무회전 초기화 유도
+        offsets: {
+          post: omit(state.offsets.post, slotId),
+          story: omit(state.offsets.story, slotId),
         },
         rotations: omit(state.rotations, slotId),
+        zooms: omit(state.zooms, slotId),
       };
     }),
-  setTransform: (variant, slotId, adjust) =>
+  setOffset: (variant, slotId, offset) =>
     set((state) => ({
-      transforms: {
-        ...state.transforms,
-        [variant]: { ...state.transforms[variant], [slotId]: adjust },
+      offsets: {
+        ...state.offsets,
+        [variant]: { ...state.offsets[variant], [slotId]: offset },
       },
     })),
   setRotation: (slotId, rotation) =>
     set((state) => ({
       rotations: { ...state.rotations, [slotId]: rotation },
+    })),
+  setZoom: (slotId, zoom) =>
+    set((state) => ({
+      zooms: { ...state.zooms, [slotId]: zoom },
     })),
 }));
 
