@@ -2,7 +2,7 @@
   "id": "frame02",
   "name": "Punching",
   "order": 2,
-  "preview": "/frames/frame02/preview.png",
+  "preview": "/frames/frame02/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame02/post/base.png",
-        "overlay": "/frames/frame02/post/overlay.png"
+        "base": "/frames/frame02/post/base.webp",
+        "overlay": "/frames/frame02/post/overlay.webp"
       },
       "slots": [
         {
@@ -54,8 +54,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame02/story/base.png",
-        "overlay": "/frames/frame02/story/overlay.png"
+        "base": "/frames/frame02/story/base.webp",
+        "overlay": "/frames/frame02/story/overlay.webp"
       },
       "slots": [
         {

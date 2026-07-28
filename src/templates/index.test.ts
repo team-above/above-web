@@ -14,7 +14,7 @@ describe("템플릿 로더", () => {
 
   it("모든 템플릿에 미리보기 경로가 있다", () => {
     for (const t of templates) {
-      expect(t.preview).toBe(`/frames/${t.id}/preview.png`);
+      expect(t.preview).toBe(`/frames/${t.id}/preview.webp`);
     }
   });
 

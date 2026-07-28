@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 
 /**
@@ -14,6 +16,15 @@ const TEMPLATE_IDS = [
   "frame06",
 ];
 const VARIANTS = ["post", "story"] as const;
+
+/** 템플릿 JSON에서 base/overlay 에셋 경로를 읽는다 (포맷 변경에 따라오게) */
+function assetPaths(id: string, variant: "post" | "story"): [string, string] {
+  const template = JSON.parse(
+    readFileSync(path.join(__dirname, `../src/templates/${id}.json`), "utf8"),
+  );
+  const { base, overlay } = template.variants[variant].assets;
+  return [base, overlay];
+}
 
 test.beforeEach(({}, testInfo) => {
   test.skip(
@@ -83,10 +94,7 @@ for (const id of TEMPLATE_IDS) {
                 }
                 return bad / total;
               },
-              [
-                `/frames/${id}/${variant}/base.png`,
-                `/frames/${id}/${variant}/overlay.png`,
-              ],
+              assetPaths(id, variant),
             ),
           { timeout: 10000 },
         )

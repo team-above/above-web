@@ -4,9 +4,10 @@
  * 실행: node scripts/derive-frames.ts
  * 규약: docs/specs/01-template-schema.md — 시안 교체 시 이 스크립트만 다시 돌리면 된다.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PNG } from "pngjs";
+import sharp from "sharp";
 import {
   buildOverlay,
   buildSlotMask,
@@ -122,11 +123,20 @@ function writePng(filePath: string, image: RawImage): void {
   writeFileSync(filePath, PNG.sync.write(png));
 }
 
-function deriveVariant(
+/** base/overlay/preview는 WebP로 저장 — 모바일 로딩 용량 절감 (마스크는 PNG 유지) */
+async function writeWebp(filePath: string, image: RawImage): Promise<void> {
+  await sharp(Buffer.from(image.data), {
+    raw: { width: image.width, height: image.height, channels: 4 },
+  })
+    .webp({ quality: 82 })
+    .toFile(filePath);
+}
+
+async function deriveVariant(
   config: FrameConfig,
   variant: VariantId,
   suffix: string,
-): TemplateVariant {
+): Promise<TemplateVariant> {
   const sourceName = `Frame${config.id.slice(-2)}_${suffix}.png`;
   const original = readPng(path.join(DESIGN_DIR, sourceName));
   const image = downscaleHalf(original);
@@ -154,10 +164,10 @@ function deriveVariant(
 
   const outDir = path.join(PUBLIC_DIR, config.id, variant);
   mkdirSync(outDir, { recursive: true });
-  writePng(path.join(outDir, "base.png"), image);
+  await writeWebp(path.join(outDir, "base.webp"), image);
   // 오버레이는 경계 안티앨리어싱 헤일로 제거를 위해 1px 팽창한 마스크로 뚫는다
-  writePng(
-    path.join(outDir, "overlay.png"),
+  await writeWebp(
+    path.join(outDir, "overlay.webp"),
     buildOverlay(
       image,
       dilateMask(placeholderMask, image.width, image.height, 1),
@@ -194,8 +204,8 @@ function deriveVariant(
   return {
     canvas: { width: image.width, height: image.height },
     assets: {
-      base: `/frames/${config.id}/${variant}/base.png`,
-      overlay: `/frames/${config.id}/${variant}/overlay.png`,
+      base: `/frames/${config.id}/${variant}/base.webp`,
+      overlay: `/frames/${config.id}/${variant}/overlay.webp`,
     },
     slots: config.slots,
     placements,
@@ -203,27 +213,30 @@ function deriveVariant(
 }
 
 /** 사용 예시 시안(SampleNN) → ¼ 축소 카드 미리보기 (스펙 02) */
-function derivePreview(config: FrameConfig): string {
+async function derivePreview(config: FrameConfig): Promise<string> {
   const sample = readPng(
     path.join(DESIGN_DIR, `Sample${config.id.slice(-2)}.png`),
   );
   const preview = downscaleHalf(downscaleHalf(sample));
   const outDir = path.join(PUBLIC_DIR, config.id);
   mkdirSync(outDir, { recursive: true });
-  writePng(path.join(outDir, "preview.png"), preview);
+  await writeWebp(path.join(outDir, "preview.webp"), preview);
   console.log(`${config.id}/preview: ${preview.width}×${preview.height} 생성`);
-  return `/frames/${config.id}/preview.png`;
+  return `/frames/${config.id}/preview.webp`;
 }
+
+// 산출물 디렉터리는 매번 재생성 — 이전 포맷 잔재 제거
+rmSync(PUBLIC_DIR, { recursive: true, force: true });
 
 for (const config of FRAME_CONFIGS) {
   const template: FrameTemplate = {
     id: config.id,
     name: config.name,
     order: config.order,
-    preview: derivePreview(config),
+    preview: await derivePreview(config),
     variants: {
-      post: deriveVariant(config, "post", "post"),
-      story: deriveVariant(config, "story", "story"),
+      post: await deriveVariant(config, "post", "post"),
+      story: await deriveVariant(config, "story", "story"),
     },
   };
   validateTemplate(template);

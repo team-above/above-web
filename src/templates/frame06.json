@@ -2,7 +2,7 @@
   "id": "frame06",
   "name": "Caption",
   "order": 6,
-  "preview": "/frames/frame06/preview.png",
+  "preview": "/frames/frame06/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame06/post/base.png",
-        "overlay": "/frames/frame06/post/overlay.png"
+        "base": "/frames/frame06/post/base.webp",
+        "overlay": "/frames/frame06/post/overlay.webp"
       },
       "slots": [
         {
@@ -39,8 +39,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame06/story/base.png",
-        "overlay": "/frames/frame06/story/overlay.png"
+        "base": "/frames/frame06/story/base.webp",
+        "overlay": "/frames/frame06/story/overlay.webp"
       },
       "slots": [
         {

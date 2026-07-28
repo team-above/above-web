@@ -2,7 +2,7 @@
   "id": "frame01",
   "name": "Duo",
   "order": 1,
-  "preview": "/frames/frame01/preview.png",
+  "preview": "/frames/frame01/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame01/post/base.png",
-        "overlay": "/frames/frame01/post/overlay.png"
+        "base": "/frames/frame01/post/base.webp",
+        "overlay": "/frames/frame01/post/overlay.webp"
       },
       "slots": [
         {
@@ -54,8 +54,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame01/story/base.png",
-        "overlay": "/frames/frame01/story/overlay.png"
+        "base": "/frames/frame01/story/base.webp",
+        "overlay": "/frames/frame01/story/overlay.webp"
       },
       "slots": [
         {
