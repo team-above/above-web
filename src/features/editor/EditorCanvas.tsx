@@ -43,19 +43,25 @@ interface EditorCanvasProps {
   exportRef: React.MutableRefObject<ExportFn | null>;
 }
 
-/** 캔버스 rect → 화면(viewport) rect — iOS 파일 메뉴 앵커용 */
-function slotAnchorFor(
+/**
+ * 캔버스 지점 → 버튼 크기(48px)의 화면 앵커 — iOS 파일 메뉴 앵커용.
+ * iOS는 메뉴 뒤 프리뷰 판을 앵커 rect 크기로 그리므로, 슬롯 rect 전체를 주면
+ * 슬롯만 한 대형 판(블롭)이 생긴다. 버튼 크기 앵커면 판이 메뉴에 붙어 보이지 않는다.
+ */
+function anchorAt(
   node: Konva.Node | null,
-  rect: { x: number; y: number; width: number; height: number },
+  canvasX: number,
+  canvasY: number,
   stageScale: number,
 ): SlotAnchor | undefined {
   const box = node?.getStage()?.container().getBoundingClientRect();
   if (!box) return undefined;
+  const SIZE = 48; // 화면 px
   return {
-    x: box.left + rect.x * stageScale,
-    y: box.top + rect.y * stageScale,
-    width: rect.width * stageScale,
-    height: rect.height * stageScale,
+    x: box.left + canvasX * stageScale - SIZE / 2,
+    y: box.top + canvasY * stageScale - SIZE / 2,
+    width: SIZE,
+    height: SIZE,
   };
 }
 
@@ -432,9 +438,15 @@ function PlacementNode({
         if (photo) {
           setSelectedSlot(selected ? null : placement.slot);
         } else {
+          // 앵커 = + 배지(슬롯 중앙) — 파일 메뉴가 배지에서 펼쳐진다
           onSlotTap(
             placement.slot,
-            slotAnchorFor(groupRef.current, rect, stageScale),
+            anchorAt(
+              groupRef.current,
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+              stageScale,
+            ),
           );
         }
       }
@@ -685,10 +697,15 @@ function SelectionControls({
     } else if (state.photos[hit.slot]) {
       setSelectedSlot(hit.slot); // 다른 사진 → 선택 전환
     } else {
-      // 빈 슬롯 → 파일 선택 (기존 동작)
+      // 빈 슬롯 → 파일 선택 (기존 동작), 앵커 = 해당 슬롯의 + 배지
       onReplace(
         hit.slot,
-        slotAnchorFor(groupRef.current, hit.rect, stageScale),
+        anchorAt(
+          groupRef.current,
+          hit.rect.x + hit.rect.width / 2,
+          hit.rect.y + hit.rect.height / 2,
+          stageScale,
+        ),
       );
     }
   };
@@ -775,10 +792,13 @@ function SelectionControls({
     removePhoto(selected);
   };
 
-  /** 📷 — 사진 교체: 파일 메뉴가 슬롯에서 펼쳐지도록 앵커를 함께 넘긴다 */
+  /** 📷 — 사진 교체: 파일 메뉴가 📷 버튼에서 펼쳐지도록 버튼 위치를 앵커로 넘긴다 */
   const handleReplaceTap = () => {
     if (!fireOnce("replace")) return;
-    onReplace(selected, slotAnchorFor(groupRef.current, rect, stageScale));
+    onReplace(
+      selected,
+      anchorAt(groupRef.current, cameraX, cameraY, stageScale),
+    );
   };
 
   const iconScale = px(15) / 24;
