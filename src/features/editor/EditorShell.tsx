@@ -8,7 +8,12 @@ import { Toast } from "@/components/Toast";
 import { useEditorStore } from "@/stores/editor";
 import type { FrameTemplate, VariantId } from "@/templates/schema";
 import type { ExportFn } from "./EditorCanvas";
-import { canExport, exportFileName } from "./export";
+import {
+  canExport,
+  dataUrlToBlob,
+  exportFileName,
+  shouldUseShareSheet,
+} from "./export";
 import { loadPhoto, PhotoLoadError } from "./photo-loader";
 
 const EditorCanvas = dynamic(() => import("./EditorCanvas"), { ssr: false });
@@ -72,6 +77,26 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
     }
   };
 
+  // 저장 완료 처리 — 토스트는 실제로 저장 플로우가 끝났을 때만 (기획 확정 2026-07-29)
+  const markSaved = () => {
+    setNotice("저장했어요");
+    // 집계 전용 무화면 라우트 경유 — 페이지뷰만 남기고 즉시 에디터로 복귀 (스펙 04 변경)
+    router.push(`/editor/${template.id}/done`);
+  };
+
+  const downloadViaAnchor = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor); // 일부 브라우저는 DOM 밖 앵커 클릭을 무시
+    anchor.click();
+    anchor.remove();
+    // 다운로드 시작 후 여유를 두고 반환 (즉시 revoke하면 일부 브라우저에서 다운로드가 끊긴다)
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    markSaved();
+  };
+
   const handleDownload = () => {
     const canvas = exportRef.current?.();
     if (!canvas) {
@@ -79,23 +104,37 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
       setError("캔버스를 준비하고 있어요. 잠시 후 다시 시도해 주세요");
       return;
     }
+    const fileName = exportFileName(template.id, variant);
+    // iOS는 시스템 공유 시트(사진 저장 포함)로 — 앵커는 갤러리로 가지 않는다.
+    // share()는 사용자 제스처와 같은 태스크에서 불러야 해서 동기(toDataURL) 경로를 쓴다
+    if (
+      shouldUseShareSheet(
+        navigator.userAgent,
+        navigator.maxTouchPoints,
+        typeof navigator.canShare === "function",
+      )
+    ) {
+      const blob = dataUrlToBlob(canvas.toDataURL("image/png"));
+      const file = new File([blob], fileName, { type: "image/png" });
+      if (navigator.canShare({ files: [file] })) {
+        navigator
+          .share({ files: [file] })
+          .then(markSaved) // 시트에서 저장/공유를 마친 경우에만 토스트
+          .catch((cause: unknown) => {
+            if ((cause as DOMException)?.name === "AbortError") return; // 시트 닫음 — 무음
+            downloadViaAnchor(blob, fileName); // 공유 실패 폴백
+          });
+      } else {
+        downloadViaAnchor(blob, fileName); // 파일 공유 불가 환경(인앱 등) 폴백
+      }
+      return;
+    }
     canvas.toBlob((blob) => {
       if (!blob) {
         setError("이미지를 만들지 못했어요. 다시 시도해 주세요");
         return;
       }
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = exportFileName(template.id, variant);
-      document.body.appendChild(anchor); // 일부 브라우저는 DOM 밖 앵커 클릭을 무시
-      anchor.click();
-      anchor.remove();
-      // 다운로드 시작 후 여유를 두고 반환 (즉시 revoke하면 일부 브라우저에서 다운로드가 끊긴다)
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      setNotice("저장했어요");
-      // 집계 전용 무화면 라우트 경유 — 페이지뷰만 남기고 즉시 에디터로 복귀 (스펙 04 변경)
-      router.push(`/editor/${template.id}/done`);
+      downloadViaAnchor(blob, fileName);
     }, "image/png");
   };
 
@@ -176,15 +215,15 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
         exportRef={exportRef}
       />
 
-      <p className="text-muted pt-3 pb-3.5 text-center text-[11px]">
-        Tap a slot to add a photo
-      </p>
-
+      {/* display:none이면 iOS Safari가 파일 메뉴 뒤에 앵커 프리뷰(원형 블롭)를 그린다 —
+          시각적으로만 숨겨 하단 중앙에 두면 일반 바텀 시트로 뜬다 */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        className="hidden"
+        className="pointer-events-none fixed bottom-0 left-1/2 h-px w-px opacity-0"
+        tabIndex={-1}
+        aria-hidden
         data-testid="photo-input"
         onChange={(e) => {
           void handleFile(e.target.files?.[0]);

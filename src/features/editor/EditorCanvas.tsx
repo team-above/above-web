@@ -512,10 +512,25 @@ function SelectionControls({
   const photo = useEditorStore((s) =>
     selected ? s.photos[selected] : undefined,
   );
+  const focal = useEditorStore((s) =>
+    selected ? s.focals[selected] : undefined,
+  );
+  const rotation = useEditorStore((s) =>
+    selected ? (s.rotations[selected] ?? 0) : 0,
+  );
+  const zoom = useEditorStore((s) => (selected ? (s.zooms[selected] ?? 1) : 1));
   const removePhoto = useEditorStore((s) => s.removePhoto);
+  const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
   const groupRef = useRef<Konva.Group>(null);
   const rotateSession = useRef<{ cleanup: () => void } | null>(null);
-  useEffect(() => () => rotateSession.current?.cleanup(), []);
+  const gestureSession = useRef<GestureSession | null>(null);
+  useEffect(
+    () => () => {
+      rotateSession.current?.cleanup();
+      gestureSession.current?.cleanup();
+    },
+    [],
+  );
 
   // 한 번의 물리 탭이 브라우저에 따라 click/tap/pointerclick 여러 konva 이벤트로 합성되므로
   // (iOS는 pointer+touch+호환 mouse를 모두 발사) 짧은 창 안의 중복 실행을 막는다
@@ -530,6 +545,17 @@ function SelectionControls({
   const placement = variantData.placements.find((p) => p.slot === selected);
   if (!placement || !photo || !selected) return null;
   const { rect } = placement;
+  const photoSize = { width: photo.bitmap.width, height: photo.bitmap.height };
+  // 제스처 표면 배치용 — 메인 레이어의 사진과 같은 변환
+  const stored = composeTransform(
+    focal ?? null,
+    zoom,
+    rotation,
+    photoSize,
+    rect,
+  );
+  const drawnW = photoSize.width * stored.scale;
+  const drawnH = photoSize.height * stored.scale;
   const { width: canvasW, height: canvasH } = variantData.canvas;
   /** 화면 픽셀 크기 고정용 — 스테이지 스케일 역산 */
   const px = (n: number) => n / stageScale;
@@ -600,10 +626,169 @@ function SelectionControls({
     rotateSession.current = { cleanup };
   };
 
+  /** 클라이언트 좌표 → 캔버스 좌표 */
+  const toCanvas = (clientX: number, clientY: number) => {
+    const box = groupRef.current
+      ?.getStage()
+      ?.container()
+      .getBoundingClientRect();
+    return {
+      x: (clientX - (box?.left ?? 0)) / stageScale,
+      y: (clientY - (box?.top ?? 0)) / stageScale,
+    };
+  };
+
+  const setCursor = (cursor: string) => {
+    const c = groupRef.current?.getStage()?.container();
+    if (c) c.style.cursor = cursor;
+  };
+
+  /**
+   * 제스처 표면 탭 — 표면이 슬롯·배경을 덮으므로, 탭한 지점 아래의 슬롯 기준으로
+   * 기존 탭 의미를 그대로 재현한다 (재탭=해제, 다른 사진=선택 전환, 빈 슬롯=첨부, 배경=해제)
+   */
+  const handleSurfaceTap = (clientX: number, clientY: number) => {
+    const p = toCanvas(clientX, clientY);
+    const hit = variantData.placements.find(
+      (pl) =>
+        p.x >= pl.rect.x &&
+        p.x <= pl.rect.x + pl.rect.width &&
+        p.y >= pl.rect.y &&
+        p.y <= pl.rect.y + pl.rect.height,
+    );
+    const state = useEditorStore.getState();
+    if (!hit || hit.slot === selected) {
+      setSelectedSlot(null); // 배경(고스트 포함) 또는 재탭 → 해제
+    } else if (state.photos[hit.slot]) {
+      setSelectedSlot(hit.slot); // 다른 사진 → 선택 전환
+    } else {
+      onReplace(hit.slot); // 빈 슬롯 → 파일 선택 (기존 동작)
+    }
+  };
+
+  /**
+   * 제스처 표면 세션 — 선택된 사진의 전체 바운딩 박스(고스트 영역 포함)에서
+   * 드래그/핀치를 받는다 (기획 요청 2026-07-29: 터치 영역을 슬롯 크기로 제한하지 말 것)
+   */
+  const startGesture = (e: Konva.KonvaEventObject<PointerEvent>) => {
+    e.evt.preventDefault();
+    const point = { x: e.evt.clientX, y: e.evt.clientY };
+    const existing = gestureSession.current;
+    if (existing) {
+      // 두 번째 손가락 → 핀치 모드 진입 (드래그·탭 오인 금지)
+      existing.pointers.set(e.evt.pointerId, point);
+      existing.lastDist = null;
+      existing.moved = 99;
+      return;
+    }
+    const pointers = new Map([[e.evt.pointerId, point]]);
+    setCursor("grabbing");
+    const onMove = (ev: PointerEvent) => {
+      const s = gestureSession.current;
+      if (!s || !s.pointers.has(ev.pointerId)) return;
+      const prev = s.pointers.get(ev.pointerId)!;
+      s.pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (s.pointers.size === 1) {
+        const dx = (ev.clientX - prev.x) / stageScale;
+        const dy = (ev.clientY - prev.y) / stageScale;
+        s.moved += Math.abs(dx) + Math.abs(dy);
+        if (s.moved > 3) {
+          applySlotUpdate(selected, rect, (current, size) =>
+            clampTransform(
+              { ...current, x: current.x + dx, y: current.y + dy },
+              size,
+              rect,
+            ),
+          );
+        }
+      } else if (s.pointers.size === 2) {
+        const [a, b] = [...s.pointers.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (s.lastDist !== null && s.lastDist > 0) {
+          const mid = toCanvas((a.x + b.x) / 2, (a.y + b.y) / 2);
+          const factor = dist / s.lastDist;
+          applySlotUpdate(selected, rect, (current, size) =>
+            zoomAt(
+              current,
+              factor,
+              { x: mid.x - rect.x, y: mid.y - rect.y },
+              size,
+              rect,
+            ),
+          );
+        }
+        s.lastDist = dist;
+      }
+    };
+    const onUp = (ev: PointerEvent) => {
+      const s = gestureSession.current;
+      if (!s || !s.pointers.has(ev.pointerId)) return;
+      s.pointers.delete(ev.pointerId);
+      s.lastDist = null;
+      if (s.pointers.size > 0) return;
+      s.cleanup();
+      gestureSession.current = null;
+      setCursor("grab");
+      if (s.moved < 6) handleSurfaceTap(ev.clientX, ev.clientY);
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    gestureSession.current = { pointers, moved: 0, lastDist: null, cleanup };
+  };
+
   const iconScale = px(15) / 24;
 
   return (
     <Group ref={groupRef}>
+      {/* 제스처 표면 — 슬롯 밖으로 잘려 보이는 원본(고스트) 영역까지 드래그/핀치/휠을 받는다 */}
+      <Rect
+        name="gesture-surface"
+        x={rect.x + rect.width / 2 + stored.x}
+        y={rect.y + rect.height / 2 + stored.y}
+        offsetX={drawnW / 2}
+        offsetY={drawnH / 2}
+        width={drawnW}
+        height={drawnH}
+        rotation={(stored.rotation * 180) / Math.PI}
+        opacity={0}
+        fill="#000"
+        onPointerDown={startGesture}
+        onWheel={(e) => {
+          e.evt.preventDefault();
+          const delta =
+            Math.abs(e.evt.deltaY) >= Math.abs(e.evt.deltaX)
+              ? e.evt.deltaY
+              : e.evt.deltaX;
+          if (e.evt.shiftKey) {
+            applySlotUpdate(selected, rect, (current, size) =>
+              rotateTo(current, current.rotation + delta * 0.002, size, rect),
+            );
+          } else {
+            const f = toCanvas(e.evt.clientX, e.evt.clientY);
+            applySlotUpdate(selected, rect, (current, size) =>
+              zoomAt(
+                current,
+                Math.exp(-delta * 0.002),
+                { x: f.x - rect.x, y: f.y - rect.y },
+                size,
+                rect,
+              ),
+            );
+          }
+        }}
+        onMouseOver={() => {
+          if (!gestureSession.current) setCursor("grab");
+        }}
+        onMouseOut={() => {
+          if (!gestureSession.current) setCursor("");
+        }}
+      />
       {/* 선택 테두리 — 슬롯 rect에 여백 없이 딱 붙는다 */}
       <Rect
         x={rect.x}

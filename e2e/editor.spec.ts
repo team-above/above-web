@@ -565,6 +565,45 @@ test("비율 전환 시 사진이 유지된다", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 표면, 스펙 06)", async ({
+  page,
+}) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  // 가로로 긴 redblue → cover 시 좌우로 슬롯 밖 고스트가 넓다
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  // 슬롯 왼쪽 바깥, 고스트가 실제로 보이는 지점
+  const { rect } = frame01.variants.post.placements[0];
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const scale = box.width / frame01.variants.post.canvas.width;
+  const ghostPoint = {
+    x: box.x + (rect.x - 30) * scale,
+    y: box.y + (rect.y + rect.height / 2) * scale,
+  };
+  await expect
+    .poll(async () => (await ghostAt(page, ghostPoint)).a)
+    .toBeGreaterThan(40);
+
+  // 고스트 지점에서 드래그 시작 → 사진이 실제로 이동한다 (슬롯 밖인데도 제스처 동작)
+  await page.mouse.move(ghostPoint.x, ghostPoint.y);
+  await page.mouse.down();
+  await page.mouse.move(ghostPoint.x + 300, ghostPoint.y, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return p.r - p.b; // 오른쪽 드래그 → 사진 왼쪽(빨강)이 슬롯 중앙에
+    })
+    .toBeGreaterThan(100);
+});
+
 test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유, 스펙 06)", async ({
   page,
 }) => {

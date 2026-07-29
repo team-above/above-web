@@ -1,6 +1,12 @@
 # 04. 내보내기 (PNG 다운로드 · 완료 화면)
 
 - 상태: **Implemented** (2026-07-28)
+- 변경 (2026-07-29, 기획 확정): **iOS는 앵커 다운로드 대신 시스템 공유 시트**(사진 저장 포함)를
+  바로 연다 — iOS 앵커 다운로드는 갤러리로 가지 않아 "저장 안 됨"으로 체감되는 문제.
+  Android·데스크톱은 기존 앵커 다운로드(즉시 저장). 판별은 `shouldUseShareSheet`
+  (UA+maxTouchPoints, iPadOS의 Mac 위장 대응), share()는 activation 유지를 위해 동기
+  toDataURL 경로에서 호출하고 실패 시 앵커 폴백. **"저장했어요" 토스트는 저장 플로우가
+  실제 완료된 때만** — 공유 시트를 그냥 닫으면(AbortError) 토스트·집계(done 라우트) 모두 없음.
 - 구현 노트: done 가드는 exportUrl까지 요구(다운로드 미경유 접근·새로고침은 전부 에디터로
   리다이렉트 — 스토어 비영속이라 "미리보기 없는 done"은 존재하지 않음). `@vercel/analytics`
   `<Analytics />` 배선 완료(라우트 페이지뷰 집계) — **대시보드 Web Analytics 활성화는 사용자 몫**.
