@@ -26,23 +26,55 @@ async function openEditor(page: Page, frameId: string) {
   ).toBeVisible();
 }
 
+/**
+ * story 프레임이 실제로 그려질 때까지 대기 — 비율 전환 직후엔 에셋 로딩으로 캔버스가 잠시 사라진다.
+ * 스테이지는 편집 영역 전체를 덮으므로 프레임 크기는 data 속성으로 판정한다.
+ */
+async function waitForStoryFrame(page: Page) {
+  const root = page.locator('[data-testid="editor-canvas"]');
+  await expect
+    .poll(async () => {
+      const box = await root.locator("canvas").first().boundingBox();
+      if (!box) return 0;
+      const [w, h] = await Promise.all([
+        root.getAttribute("data-frame-width"),
+        root.getAttribute("data-frame-height"),
+      ]);
+      return Number(w) ? Number(h) / Number(w) : 0;
+    })
+    .toBeGreaterThan(1.7);
+}
+
+/** 프레임 좌표 → 페이지 좌표 (스테이지가 편집 영역 전체를 덮으므로 원점을 data 속성에서 읽는다) */
+async function frameAt(page: Page, x: number, y: number) {
+  const root = page.locator('[data-testid="editor-canvas"]');
+  const box = (await root.locator("canvas").first().boundingBox())!;
+  const [left, top, scale] = await Promise.all([
+    root.getAttribute("data-frame-left"),
+    root.getAttribute("data-frame-top"),
+    root.getAttribute("data-frame-scale"),
+  ]);
+  return {
+    x: box.x + Number(left) + x * Number(scale),
+    y: box.y + Number(top) + y * Number(scale),
+  };
+}
+
 async function attachToSlot(
   page: Page,
   variant: "post" | "story",
   slotId: string,
 ) {
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const variantData = frame01.variants[variant];
-  const placement = variantData.placements.find(
+  const placement = frame01.variants[variant].placements.find(
     (p: { slot: string }) => p.slot === slotId,
   );
-  const scale = box.width / variantData.canvas.width;
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.mouse.click(
-    box.x + (placement.rect.x + placement.rect.width / 2) * scale,
-    box.y + (placement.rect.y + placement.rect.height / 2) * scale,
+  const point = await frameAt(
+    page,
+    placement.rect.x + placement.rect.width / 2,
+    placement.rect.y + placement.rect.height / 2,
   );
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(point.x, point.y);
   await (await chooserPromise).setFiles(FIXTURE);
   // 첨부 반영 대기 — 다운로드 버튼 활성화로 판단
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
@@ -106,13 +138,7 @@ test("story 비율로 내보내면 1080×1920", async ({ page }) => {
   await attachToSlot(page, "post", "left");
   await page.getByRole("button", { name: "Story 9:16" }).click();
   // 스토리 캔버스(9:16) 로드 완료 대기 — 전환 직후엔 스테이지가 아직 없다
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  await expect
-    .poll(async () => {
-      const box = await canvas.boundingBox();
-      return box ? box.height / box.width : 0;
-    })
-    .toBeGreaterThan(1.7);
+  await waitForStoryFrame(page);
   const { download, png } = await downloadPng(page);
   expect(download.suggestedFilename()).toBe("above-frame01-story.png");
   expect(png.width).toBe(1080);
@@ -128,15 +154,12 @@ test("Shift+휠 회전(90° 스냅)이 미리보기와 내보내기에 반영된
   );
   await openEditor(page, "frame01");
   // 좌 빨강/우 파랑 가로 사진 → 90° 회전하면 위 빨강/아래 파랑이 된다
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const v = frame01.variants.post;
-  const rect = v.placements[0].rect;
-  const scale = box.width / v.canvas.width;
-  const center = {
-    x: box.x + (rect.x + rect.width / 2) * scale,
-    y: box.y + (rect.y + rect.height / 2) * scale,
-  };
+  const rect = frame01.variants.post.placements[0].rect;
+  const center = await frameAt(
+    page,
+    rect.x + rect.width / 2,
+    rect.y + rect.height / 2,
+  );
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
   await (
@@ -162,12 +185,7 @@ test("Shift+휠 회전(90° 스냅)이 미리보기와 내보내기에 반영된
 
   // 비율 전환 후에도 회전(사진 속성)이 유지된다 — story 내보내기에서도 위 빨강/아래 파랑
   await page.getByRole("button", { name: "Story 9:16" }).click();
-  await expect
-    .poll(async () => {
-      const b = await canvas.boundingBox();
-      return b ? b.height / b.width : 0;
-    })
-    .toBeGreaterThan(1.7);
+  await waitForStoryFrame(page);
   const { png: storyPng } = await downloadPng(page);
   const storyRect = frame01.variants.story.placements[0].rect;
   const storyTop = pixelOf(

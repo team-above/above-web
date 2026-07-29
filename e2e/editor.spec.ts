@@ -21,6 +21,31 @@ function trackErrors(page: Page): string[] {
   return errors;
 }
 
+/**
+ * 프레임(템플릿) 좌표 → 페이지 좌표 변환기.
+ * 스테이지가 편집 영역 전체를 덮으므로 프레임 원점·배율은 data 속성에서 읽는다 (스펙 06).
+ */
+async function frameMapper(page: Page) {
+  const root = page.locator('[data-testid="editor-canvas"]');
+  const canvas = root.locator("canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const [left, top, scale] = await Promise.all([
+    root.getAttribute("data-frame-left"),
+    root.getAttribute("data-frame-top"),
+    root.getAttribute("data-frame-scale"),
+  ]);
+  const s = Number(scale);
+  return {
+    scale: s,
+    stage: box,
+    /** 프레임 좌표 → 페이지 좌표 */
+    at: (x: number, y: number) => ({
+      x: box.x + Number(left) + x * s,
+      y: box.y + Number(top) + y * s,
+    }),
+  };
+}
+
 /** 캔버스 표시 좌표계에서 특정 placement 중심의 페이지 좌표를 구한다 */
 async function placementCenter(
   page: Page,
@@ -28,17 +53,14 @@ async function placementCenter(
   variant: "post" | "story",
   slotId: string,
 ) {
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const variantData = template.variants[variant];
-  const placement = variantData.placements.find(
+  const frame = await frameMapper(page);
+  const placement = template.variants[variant].placements.find(
     (p: { slot: string }) => p.slot === slotId,
   );
-  const scale = box.width / variantData.canvas.width;
-  return {
-    x: box.x + (placement.rect.x + placement.rect.width / 2) * scale,
-    y: box.y + (placement.rect.y + placement.rect.height / 2) * scale,
-  };
+  return frame.at(
+    placement.rect.x + placement.rect.width / 2,
+    placement.rect.y + placement.rect.height / 2,
+  );
 }
 
 /** 페이지 좌표 지점의 메인 레이어 캔버스 픽셀 RGB를 읽는다 */
@@ -65,19 +87,23 @@ async function pixelAt(page: Page, point: { x: number; y: number }) {
 async function countSlotColors(
   page: Page,
   rect: { x: number; y: number; width: number; height: number },
-  canvasWidth: number,
 ) {
   return page.evaluate(
-    ({ rect, canvasWidth }) => {
-      const el = document.querySelector(
-        '[data-testid="editor-canvas"] canvas',
-      ) as HTMLCanvasElement;
-      const scale = el.width / canvasWidth;
+    ({ rect }) => {
+      // 스테이지가 편집 영역 전체를 덮으므로 프레임 원점·배율을 data 속성에서 읽는다
+      const root = document.querySelector(
+        '[data-testid="editor-canvas"]',
+      ) as HTMLElement;
+      const el = root.querySelector("canvas") as HTMLCanvasElement;
+      const dpr = el.width / el.clientWidth;
+      const scale = Number(root.dataset.frameScale) * dpr;
+      const ox = Number(root.dataset.frameLeft) * dpr;
+      const oy = Number(root.dataset.frameTop) * dpr;
       const data = el
         .getContext("2d")!
         .getImageData(
-          Math.round(rect.x * scale),
-          Math.round(rect.y * scale),
+          Math.round(ox + rect.x * scale),
+          Math.round(oy + rect.y * scale),
           Math.round(rect.width * scale),
           Math.round(rect.height * scale),
         ).data;
@@ -94,7 +120,7 @@ async function countSlotColors(
       }
       return { red, green, blue, white };
     },
-    { rect, canvasWidth },
+    { rect },
   );
 }
 
@@ -137,11 +163,9 @@ test("frame05: 낙서 장식이 사진 위에 남는다 (층 순서)", async ({ 
 
   const slotRect = frame05.variants.post.placements[0].rect;
   await expect
-    .poll(async () => (await countSlotColors(page, slotRect, 1080)).red)
+    .poll(async () => (await countSlotColors(page, slotRect)).red)
     .toBeGreaterThan(1000); // 사진이 슬롯을 채움
-  expect((await countSlotColors(page, slotRect, 1080)).green).toBeGreaterThan(
-    30,
-  ); // 낙서가 사진 위에 남음
+  expect((await countSlotColors(page, slotRect)).green).toBeGreaterThan(30); // 낙서가 사진 위에 남음
   expect(errors).toEqual([]);
 });
 
@@ -154,11 +178,9 @@ test("frame02: 파란 별 장식이 사진 위에 남는다 (층 순서)", async
     (p: { slot: string }) => p.slot === "main",
   ).rect;
   await expect
-    .poll(async () => (await countSlotColors(page, mainRect, 1080)).red)
+    .poll(async () => (await countSlotColors(page, mainRect)).red)
     .toBeGreaterThan(1000);
-  expect((await countSlotColors(page, mainRect, 1080)).blue).toBeGreaterThan(
-    100,
-  ); // 하늘색 별이 사진 위에 남음
+  expect((await countSlotColors(page, mainRect)).blue).toBeGreaterThan(100); // 하늘색 별이 사진 위에 남음
   expect(errors).toEqual([]);
 });
 
@@ -171,13 +193,11 @@ test("frame04: 요일 라벨이 사진 위에 남는다 (층 순서)", async ({ 
     (p: { slot: string }) => p.slot === "mon",
   ).rect;
   await expect
-    .poll(async () => (await countSlotColors(page, monRect, 1080)).red)
+    .poll(async () => (await countSlotColors(page, monRect)).red)
     .toBeGreaterThan(300);
   // 라벨 텍스트(흰색)가 사진 위에 남음 — 라벨은 슬롯 상단 영역
   const labelArea = { ...monRect, height: Math.round(monRect.height * 0.3) };
-  expect((await countSlotColors(page, labelArea, 1080)).white).toBeGreaterThan(
-    10,
-  );
+  expect((await countSlotColors(page, labelArea)).white).toBeGreaterThan(10);
   expect(errors).toEqual([]);
 });
 
@@ -205,15 +225,12 @@ test("드래그·줌을 끝까지 밀어도 슬롯에 빈틈이 생기지 않는
   await page.mouse.wheel(0, 3000);
 
   // 슬롯 왼쪽 가장자리 안쪽 픽셀이 여전히 빨강 (빈틈 = 회색 자리표시 노출이면 실패)
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
+  const frame = await frameMapper(page);
   const { rect } = frame01.variants.post.placements[0];
-  const scale = box.width / frame01.variants.post.canvas.width;
-  const leftInside = {
-    x: box.x + (rect.x + 4) * scale,
-    y: box.y + (rect.y + rect.height / 2) * scale,
-  };
-  const edge = await pixelAt(page, leftInside);
+  const edge = await pixelAt(
+    page,
+    frame.at(rect.x + 4, rect.y + rect.height / 2),
+  );
   expect(edge.r - edge.g).toBeGreaterThan(120);
   expect(errors).toEqual([]);
 });
@@ -294,20 +311,16 @@ test("선택하면 고스트·테두리가 보이고, 배경 탭으로 해제된
 
   // 첨부 직후 자동 선택 → 슬롯 왼쪽 바깥에 고스트(빨강)가 보인다
   const { rect } = frame01.variants.post.placements[0];
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const scale = box.width / frame01.variants.post.canvas.width;
-  const outside = {
-    x: box.x + (rect.x - 40) * scale,
-    y: box.y + (rect.y + rect.height / 2) * scale,
-  };
+  const frame = await frameMapper(page);
+  const outside = frame.at(rect.x - 40, rect.y + rect.height / 2);
   await expect
     .poll(async () => (await ghostAt(page, outside)).a)
     .toBeGreaterThan(40);
   expect((await ghostAt(page, outside)).r).toBeGreaterThan(120);
 
   // 배경(슬롯 밖 남색 영역) 탭 → 선택 해제 → 고스트 사라짐
-  await page.mouse.click(box.x + 60 * scale, box.y + 60 * scale);
+  const bg = frame.at(60, 60);
+  await page.mouse.click(bg.x, bg.y);
   await expect
     .poll(async () => (await ghostAt(page, outside)).a)
     .toBeLessThan(10);
@@ -323,30 +336,27 @@ test("선택하면 고스트·테두리가 보이고, 배경 탭으로 해제된
     .toBeLessThan(10);
 });
 
-/** 선택 오버레이 버튼의 화면 좌표 (SelectionControls의 배치 로직 재현) */
+/**
+ * 선택 오버레이 버튼의 화면 좌표 (SelectionControls·ReplaceButton의 배치 로직 재현).
+ * 버튼은 프레임이 아니라 스테이지(편집 영역 전체) 안 22px 여백으로 클램프된다.
+ */
 async function selectionButtons(page: Page, slotIndex = 0) {
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const v = frame01.variants.post;
-  const rect = v.placements[slotIndex].rect;
-  const s = box.width / v.canvas.width;
-  const pxc = (n: number) => n / s; // 화면 n px에 해당하는 캔버스 단위
-  const cx = (val: number) =>
-    Math.min(Math.max(val, pxc(22)), v.canvas.width - pxc(22));
-  const cy = (val: number) =>
-    Math.min(Math.max(val, pxc(22)), v.canvas.height - pxc(22));
-  const toScreen = (x: number, y: number) => ({
-    x: box.x + x * s,
-    y: box.y + y * s,
+  const frame = await frameMapper(page);
+  const stage = frame.stage;
+  const rect = frame01.variants.post.placements[slotIndex].rect;
+  const clamp = (p: { x: number; y: number }) => ({
+    x: Math.min(Math.max(p.x, stage.x + 22), stage.x + stage.width - 22),
+    y: Math.min(Math.max(p.y, stage.y + 22), stage.y + stage.height - 22),
   });
+  const centerX = frame.at(rect.x + rect.width / 2, 0).x;
   return {
-    close: toScreen(cx(rect.x + rect.width), cy(rect.y)),
-    camera: toScreen(
-      cx(rect.x + rect.width / 2),
-      cy(rect.y + rect.height + pxc(32)),
-    ),
-    rotate: toScreen(cx(rect.x + rect.width / 2), cy(rect.y - pxc(32))),
-    slotCenterScreen: toScreen(
+    close: clamp(frame.at(rect.x + rect.width, rect.y)),
+    camera: clamp({
+      x: centerX,
+      y: frame.at(0, rect.y + rect.height).y + 32,
+    }),
+    rotate: clamp({ x: centerX, y: frame.at(0, rect.y).y - 32 }),
+    slotCenterScreen: frame.at(
       rect.x + rect.width / 2,
       rect.y + rect.height / 2,
     ),
@@ -369,13 +379,8 @@ test("📷로 교체 파일 선택이 열리고, ✕는 사진을 삭제한다 (
   await chooser.setFiles(FIXTURE); // 교체 (자동 선택 유지)
 
   const { rect } = frame01.variants.post.placements[0];
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const scale = box.width / frame01.variants.post.canvas.width;
-  const probe = {
-    x: box.x + (rect.x + 4) * scale,
-    y: box.y + (rect.y + rect.height / 2) * scale,
-  };
+  const frame = await frameMapper(page);
+  const probe = frame.at(rect.x + 4, rect.y + rect.height / 2);
   await expect
     .poll(async () => (await ghostAt(page, probe)).a)
     .toBeGreaterThan(40); // 교체 후에도 선택 상태(고스트)
@@ -423,17 +428,15 @@ test("궤도 핸들 드래그로 회전한다 (90° 스냅)", async ({ page }, t
 
   // +90° 회전: 사진 왼쪽(빨강)이 슬롯 위쪽으로 온다
   const { rect } = frame01.variants.post.placements[0];
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const scale = box.width / frame01.variants.post.canvas.width;
-  const top = await pixelAt(page, {
-    x: box.x + (rect.x + rect.width / 2) * scale,
-    y: box.y + (rect.y + 20) * scale,
-  });
-  const bottom = await pixelAt(page, {
-    x: box.x + (rect.x + rect.width / 2) * scale,
-    y: box.y + (rect.y + rect.height - 20) * scale,
-  });
+  const frame = await frameMapper(page);
+  const top = await pixelAt(
+    page,
+    frame.at(rect.x + rect.width / 2, rect.y + 20),
+  );
+  const bottom = await pixelAt(
+    page,
+    frame.at(rect.x + rect.width / 2, rect.y + rect.height - 20),
+  );
   expect(top.r - top.b).toBeGreaterThan(100);
   expect(bottom.b - bottom.r).toBeGreaterThan(100);
 });
@@ -449,10 +452,9 @@ test("미선택 사진은 드래그해도 움직이지 않는다 (스펙 06)", a
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
   // 배경 탭으로 해제 후 드래그 시도
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const scale = box.width / frame01.variants.post.canvas.width;
-  await page.mouse.click(box.x + 60 * scale, box.y + 60 * scale);
+  const frame = await frameMapper(page);
+  const bg = frame.at(60, 60);
+  await page.mouse.click(bg.x, bg.y);
 
   const before = await pixelAt(page, center);
   await page.mouse.move(center.x, center.y);
@@ -581,19 +583,17 @@ test("캔버스 바깥 페이지 영역 탭으로도 선택이 해제된다 (스
 
   // 자동 선택 → 고스트 확인
   const { rect } = frame01.variants.post.placements[0];
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const scale = box.width / frame01.variants.post.canvas.width;
-  const probe = {
-    x: box.x + (rect.x - 40) * scale,
-    y: box.y + (rect.y + rect.height / 2) * scale,
-  };
+  const frame = await frameMapper(page);
+  const probe = frame.at(rect.x - 40, rect.y + rect.height / 2);
   await expect
     .poll(async () => (await ghostAt(page, probe)).a)
     .toBeGreaterThan(40);
 
-  // 캔버스 아래 페이지 여백 탭 → 해제 (슬롯이 캔버스를 꽉 채우는 프레임의 유일한 해제 공간)
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height + 20);
+  // 스테이지 바깥 페이지 여백(좌측 패딩) 탭 → 해제
+  await page.mouse.click(
+    Math.max(2, frame.stage.x - 8),
+    frame.stage.y + frame.stage.height / 2,
+  );
   await expect
     .poll(async () => (await ghostAt(page, probe)).a)
     .toBeLessThan(10);
@@ -614,13 +614,8 @@ test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 
 
   // 슬롯 왼쪽 바깥, 고스트가 실제로 보이는 지점
   const { rect } = frame01.variants.post.placements[0];
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const scale = box.width / frame01.variants.post.canvas.width;
-  const ghostPoint = {
-    x: box.x + (rect.x - 30) * scale,
-    y: box.y + (rect.y + rect.height / 2) * scale,
-  };
+  const frame = await frameMapper(page);
+  const ghostPoint = frame.at(rect.x - 30, rect.y + rect.height / 2);
   await expect
     .poll(async () => (await ghostAt(page, ghostPoint)).a)
     .toBeGreaterThan(40);
@@ -636,6 +631,109 @@ test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 
       return p.r - p.b; // 오른쪽 드래그 → 사진 왼쪽(빨강)이 슬롯 중앙에
     })
     .toBeGreaterThan(100);
+});
+
+/** 고스트 레이어의 불투명 픽셀 가로 범위 (캔버스 백킹 좌표) */
+async function ghostBBox(page: Page) {
+  return page.evaluate(() => {
+    const c = document.querySelectorAll(
+      '[data-testid="editor-canvas"] canvas',
+    )[1] as HTMLCanvasElement;
+    const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = -1;
+    for (let y = 0; y < c.height; y += 3) {
+      for (let x = 0; x < c.width; x += 3) {
+        if (d[(y * c.width + x) * 4 + 3] > 0) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+        }
+      }
+    }
+    return { minX, maxX, dpr: c.width / c.clientWidth };
+  });
+}
+
+test("고스트가 프레임 밖으로 넘쳐도 잘리지 않는다 (기획 피드백 2026-07-29)", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop-chrome",
+    "프레임 좌우 여백이 있어야 넘침을 관측할 수 있다 — 모바일 뷰포트는 프레임이 폭을 꽉 채운다",
+  );
+  await openEditor(page, "frame02");
+  await page.getByRole("button", { name: "Story 9:16" }).click();
+  const root = page.locator('[data-testid="editor-canvas"]');
+  await expect
+    .poll(async () => Number(await root.getAttribute("data-frame-height")))
+    .toBeGreaterThan(0);
+
+  // 전체 너비 슬롯 — cover 상태에서 사진 바운딩 박스가 프레임 밖으로 나간다
+  const main = frame02.variants.story.placements.find(
+    (p: { slot: string }) => p.slot === "main",
+  ).rect;
+  const frame = await frameMapper(page);
+  const center = frame.at(main.x + main.width / 2, main.y + main.height / 2);
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  // 고스트가 프레임 왼쪽 경계보다 더 왼쪽에도 그려진다
+  const frameLeft = Number(await root.getAttribute("data-frame-left"));
+  await expect
+    .poll(async () => {
+      const g = await ghostBBox(page);
+      return frameLeft * g.dpr - g.minX; // 프레임 밖으로 삐져나온 px
+    })
+    .toBeGreaterThan(2);
+});
+
+test("사진 밖에서 핀치해도 배율이 조정된다 (기획 피드백 2026-07-29)", async ({
+  page,
+}) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  await attachPhoto(page, center); // 자동 선택
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+  const before = await ghostBBox(page);
+
+  // 사진 바운딩 박스 한참 아래(프레임 여백)에서 두 손가락 벌리기
+  const { rect } = frame01.variants.post.placements[0];
+  const frame = await frameMapper(page);
+  const pinch = frame.at(rect.x + rect.width / 2, rect.y + rect.height + 500);
+  await page.evaluate(async ({ x, y }) => {
+    const el = document.elementFromPoint(x, y)!;
+    const opts = (id: number, cx: number, cy: number) => ({
+      pointerId: id,
+      pointerType: "touch",
+      isPrimary: id === 1,
+      clientX: cx,
+      clientY: cy,
+      bubbles: true,
+      cancelable: true,
+    });
+    el.dispatchEvent(new PointerEvent("pointerdown", opts(1, x - 20, y)));
+    el.dispatchEvent(new PointerEvent("pointerdown", opts(2, x + 20, y)));
+    for (let i = 1; i <= 15; i++) {
+      const d = 20 + i * 6;
+      window.dispatchEvent(new PointerEvent("pointermove", opts(1, x - d, y)));
+      window.dispatchEvent(new PointerEvent("pointermove", opts(2, x + d, y)));
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    window.dispatchEvent(new PointerEvent("pointerup", opts(1, x - 110, y)));
+    window.dispatchEvent(new PointerEvent("pointerup", opts(2, x + 110, y)));
+  }, pinch);
+
+  // 고스트(=사진 전체)가 실제로 커졌다
+  await expect
+    .poll(async () => {
+      const after = await ghostBBox(page);
+      return (after.maxX - after.minX) / (before.maxX - before.minX);
+    })
+    .toBeGreaterThan(1.15);
 });
 
 test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유, 스펙 06)", async ({
@@ -703,13 +801,8 @@ test("터치 탭으로 📷 교체·✕ 사진 삭제가 동작한다 (스펙 06
 
   const buttons = await selectionButtons(page);
   const { rect } = frame01.variants.post.placements[0];
-  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
-  const box = (await canvas.boundingBox())!;
-  const scale = box.width / frame01.variants.post.canvas.width;
-  const probe = {
-    x: box.x + (rect.x + 4) * scale,
-    y: box.y + (rect.y + rect.height / 2) * scale,
-  };
+  const frame = await frameMapper(page);
+  const probe = frame.at(rect.x + 4, rect.y + rect.height / 2);
   await expect
     .poll(async () => (await ghostAt(page, probe)).a)
     .toBeGreaterThan(40); // 선택 상태(고스트)

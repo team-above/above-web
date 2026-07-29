@@ -50,16 +50,31 @@ for (const id of TEMPLATE_IDS) {
           () =>
             page.evaluate(
               async ([baseSrc, overlaySrc]) => {
-                const canvasEl = document.querySelector(
-                  '[data-testid="editor-canvas"] canvas',
+                // 스테이지가 편집 영역 전체를 덮으므로 프레임 영역만 잘라 비교한다 (스펙 06)
+                const root = document.querySelector(
+                  '[data-testid="editor-canvas"]',
+                ) as HTMLElement;
+                const canvasEl = root.querySelector(
+                  "canvas",
                 ) as HTMLCanvasElement;
-                const { width, height } = canvasEl;
+                const dpr = canvasEl.width / canvasEl.clientWidth;
+                const px = (name: string) =>
+                  Math.round(Number(root.dataset[name]) * dpr);
+                const [fx, fy, width, height] = [
+                  px("frameLeft"),
+                  px("frameTop"),
+                  px("frameWidth"),
+                  px("frameHeight"),
+                ];
+                if (width === 0 || height === 0) return 1;
                 const actual = canvasEl
                   .getContext("2d")!
-                  .getImageData(0, 0, width, height).data;
-                // 아직 base가 안 그려졌으면(전부 투명) 실패값 반환 → poll 재시도
-                if (actual[3] === 0 && actual[actual.length - 1] === 0)
-                  return 1;
+                  .getImageData(fx, fy, width, height).data;
+                // 아직 base가 안 그려졌으면 실패값 반환 → poll 재시도.
+                // 모서리는 라운드 클립으로 투명하므로 중앙 픽셀로 판정한다
+                const center =
+                  (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
+                if (actual[center + 3] === 0) return 1;
 
                 const load = (src: string) =>
                   new Promise<HTMLImageElement>((resolve, reject) => {

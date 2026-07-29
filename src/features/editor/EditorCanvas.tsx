@@ -43,6 +43,27 @@ interface EditorCanvasProps {
 }
 
 /**
+ * 메인 레이어를 프레임 영역으로 자르는 클립 — 스테이지가 편집 영역 전체를 덮으므로
+ * 프레임 바깥으로 새는 그림과 라운드 코너(화면 8px)를 여기서 처리한다.
+ * 고스트·선택 컨트롤 레이어에는 적용하지 않는다 (프레임 밖에도 보여야 하므로).
+ */
+function roundedFrameClip(canvas: Size, stageScale: number) {
+  return (ctx: Konva.Context) => {
+    const r = 8 / stageScale;
+    const { width: w, height: h } = canvas;
+    ctx.moveTo(r, 0);
+    ctx.lineTo(w - r, 0);
+    ctx.quadraticCurveTo(w, 0, w, r);
+    ctx.lineTo(w, h - r);
+    ctx.quadraticCurveTo(w, h, w - r, h);
+    ctx.lineTo(r, h);
+    ctx.quadraticCurveTo(0, h, 0, h - r);
+    ctx.lineTo(0, r);
+    ctx.quadraticCurveTo(0, 0, r, 0);
+  };
+}
+
+/**
  * 슬롯의 최신 합성 변환을 읽어 updater를 적용하고 초점·줌·회전(모두 비율 간 공유)으로 분해 저장한다.
  * 윈도우 리스너(클로저)에서도 안전하도록 항상 스토어에서 최신 상태를 읽는다.
  */
@@ -102,19 +123,44 @@ export default function EditorCanvas({
       ? fitToViewport(variant, viewport)
       : null;
 
-  // 내보내기: 스테이지를 잠시 1:1 크기로 되돌려 메인 레이어만 래스터화 (UI·선택 레이어 제외)
+  /**
+   * 스테이지는 프레임이 아니라 편집 영역 전체를 덮는다 (기획 피드백 2026-07-29):
+   * 프레임 밖으로 넘치는 고스트가 잘리지 않고, 프레임 밖에서도 제스처를 받을 수 있다.
+   * 프레임은 그 안에 중앙 배치되고, 레이어 원점을 프레임 좌상단으로 옮겨
+   * 템플릿 좌표(placement.rect)는 기존과 동일하게 쓴다.
+   */
+  const stageSize = fitted ? viewport : null;
+  const origin = fitted
+    ? (() => {
+        // 정수 px로 스냅 — 프레임이 픽셀 격자에 딱 맞아 서브픽셀 번짐이 없다
+        const left = Math.round((viewport.width - fitted.width) / 2);
+        const top = Math.round((viewport.height - fitted.height) / 2);
+        // 캔버스 단위 (레이어 x/y에는 스테이지 스케일이 곱해진다)
+        return { left, top, x: left / fitted.scale, y: top / fitted.scale };
+      })()
+    : null;
+
+  // 내보내기: 스테이지를 잠시 1:1 프레임 크기로 되돌려 메인 레이어만 래스터화
+  // (UI·선택 레이어 제외). 레이어 오프셋·라운드 클립도 함께 걷어낸다
   useEffect(() => {
     exportRef.current = () => {
       const stage = stageRef.current;
       if (!stage) return null;
+      const layer = stage.getLayers()[0];
       const prev = {
         scale: stage.scaleX(),
         width: stage.width(),
         height: stage.height(),
+        position: layer.position(),
+        clipFunc: layer.clipFunc(),
       };
+      layer.clipFunc(undefined); // 미리보기용 라운드 코너는 내보내기에 넣지 않는다
+      layer.position({ x: 0, y: 0 });
       stage.scale({ x: 1, y: 1 });
       stage.size(variantData.canvas);
-      const canvas = stage.getLayers()[0].toCanvas();
+      const canvas = layer.toCanvas();
+      layer.clipFunc(prev.clipFunc);
+      layer.position(prev.position);
       stage.scale({ x: prev.scale, y: prev.scale });
       stage.size({ width: prev.width, height: prev.height });
       stage.batchDraw();
@@ -126,23 +172,54 @@ export default function EditorCanvas({
   }, [exportRef, variantData]);
 
   return (
-    <div data-testid="editor-canvas" className="flex min-h-0 w-full flex-1 p-4">
+    <div
+      data-testid="editor-canvas"
+      // 프레임 위치·배율 — E2E가 템플릿 좌표를 화면 좌표로 환산할 때 쓴다
+      data-frame-left={origin?.left ?? 0}
+      data-frame-top={origin?.top ?? 0}
+      data-frame-width={fitted?.width ?? 0}
+      data-frame-height={fitted?.height ?? 0}
+      data-frame-scale={fitted?.scale ?? 0}
+      className="flex min-h-0 w-full flex-1 p-4"
+    >
       {/* 안쪽 div가 측정 기준 — 바깥 p-4가 프레임 카드 그림자의 숨쉴 공간 */}
       <div
         ref={containerRef}
         // touch-none: 캔버스 제스처(드래그/핀치)가 페이지 스크롤로 새지 않게
-        className="flex h-full w-full touch-none items-center justify-center"
+        className="relative h-full w-full touch-none"
       >
-        {fitted && base && (
-          <div className="relative overflow-hidden rounded-lg bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.1),0_8px_32px_rgba(0,0,0,0.18)]">
+        {fitted && base && stageSize && origin && (
+          <>
+            {/* 프레임 카드 배경 — 그림자·라운드는 스테이지 뒤 DOM이 담당 (스테이지는 전체를 덮는다) */}
+            <div
+              className="absolute rounded-lg bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.1),0_8px_32px_rgba(0,0,0,0.18)]"
+              style={{
+                left: origin.left,
+                top: origin.top,
+                width: fitted.width,
+                height: fitted.height,
+              }}
+            />
             <Stage
               ref={stageRef}
-              width={fitted.width}
-              height={fitted.height}
+              width={stageSize.width}
+              height={stageSize.height}
               scaleX={fitted.scale}
               scaleY={fitted.scale}
+              className="absolute inset-0"
+              // 프레임 밖 빈 영역(아무것도 맞지 않은 탭) → 선택 해제
+              onPointerDown={(e) => {
+                if (e.target === e.target.getStage()) setSelectedSlot(null);
+              }}
+              onTap={(e) => {
+                if (e.target === e.target.getStage()) setSelectedSlot(null);
+              }}
             >
-              <Layer>
+              <Layer
+                x={origin.x}
+                y={origin.y}
+                clipFunc={roundedFrameClip(variantData.canvas, fitted.scale)}
+              >
                 {/* base가 배경 탭을 받아 선택 해제 (슬롯이 위에서 우선한다).
                     onTap은 iOS 실기기에서 pointer 이벤트가 유실될 때의 터치 폴백 */}
                 <KonvaImage
@@ -159,17 +236,24 @@ export default function EditorCanvas({
                 ))}
                 {overlay && <KonvaImage image={overlay} listening={false} />}
               </Layer>
-              {/* UI 레이어 — 내보내기·시각 회귀 비교 대상이 아니다 */}
-              <Layer listening={false}>
+              {/* UI 레이어 — 내보내기·시각 회귀 비교 대상이 아니다.
+                  클립이 없어 프레임 밖으로 넘치는 고스트도 그대로 보인다 */}
+              <Layer x={origin.x} y={origin.y} listening={false}>
                 {variantData.placements.map((placement) => (
                   <GhostPhoto key={placement.slot} placement={placement} />
                 ))}
               </Layer>
               {/* 선택 컨트롤 레이어 — 역시 내보내기 제외, 버튼은 탭 가능 */}
-              <Layer>
+              <Layer x={origin.x} y={origin.y}>
                 <SelectionControls
                   variantData={variantData}
                   stageScale={fitted.scale}
+                  stageArea={{
+                    x: -origin.x,
+                    y: -origin.y,
+                    width: stageSize.width / fitted.scale,
+                    height: stageSize.height / fitted.scale,
+                  }}
                 />
               </Layer>
             </Stage>
@@ -188,8 +272,12 @@ export default function EditorCanvas({
                     data-testid={`attach-${p.slot}`}
                     className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
                     style={{
-                      left: (p.rect.x + p.rect.width / 2) * fitted.scale,
-                      top: (p.rect.y + p.rect.height / 2) * fitted.scale,
+                      left:
+                        origin.left +
+                        (p.rect.x + p.rect.width / 2) * fitted.scale,
+                      top:
+                        origin.top +
+                        (p.rect.y + p.rect.height / 2) * fitted.scale,
                     }}
                     onClick={() => onSlotTap(p.slot)}
                   >
@@ -210,11 +298,13 @@ export default function EditorCanvas({
             <ReplaceButton
               variantData={variantData}
               stageScale={fitted.scale}
+              origin={origin}
+              stageSize={stageSize}
               selectedSlot={selectedSlot}
               hasPhoto={Boolean(selectedSlot && photos[selectedSlot])}
               onReplace={onSlotTap}
             />
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -262,12 +352,16 @@ function GhostPhoto({ placement }: { placement: TemplatePlacement }) {
 function ReplaceButton({
   variantData,
   stageScale,
+  origin,
+  stageSize,
   selectedSlot,
   hasPhoto,
   onReplace,
 }: {
   variantData: FrameTemplate["variants"]["post"];
   stageScale: number;
+  origin: { left: number; top: number };
+  stageSize: Size;
   selectedSlot: string | null;
   hasPhoto: boolean;
   onReplace: (slotId: string) => void;
@@ -275,15 +369,15 @@ function ReplaceButton({
   const placement = variantData.placements.find((p) => p.slot === selectedSlot);
   if (!placement || !selectedSlot || !hasPhoto) return null;
   const { rect } = placement;
-  // SelectionControls의 배치 규칙과 동일: 슬롯 아래 바깥, 화면 22px 여백으로 클램프
+  // SelectionControls의 배치 규칙과 동일: 슬롯 아래 바깥, 스테이지 안 22px 여백으로 클램프
   const clamp = (v: number, max: number) => Math.min(Math.max(v, 22), max - 22);
   const left = clamp(
-    (rect.x + rect.width / 2) * stageScale,
-    variantData.canvas.width * stageScale,
+    origin.left + (rect.x + rect.width / 2) * stageScale,
+    stageSize.width,
   );
   const top = clamp(
-    (rect.y + rect.height) * stageScale + 32,
-    variantData.canvas.height * stageScale,
+    origin.top + (rect.y + rect.height) * stageScale + 32,
+    stageSize.height,
   );
   return (
     <button
@@ -328,6 +422,8 @@ interface GestureSession {
   /** 누적 이동량 (캔버스 좌표 단위) — 탭/드래그 판별 */
   moved: number;
   lastDist: number | null;
+  /** 한 손가락 드래그를 이동으로 해석할지 — 사진 밖에서 시작하면 false (핀치는 항상 허용) */
+  canDrag?: boolean;
   cleanup: () => void;
 }
 
@@ -379,15 +475,16 @@ function PlacementNode({ placement, stageScale }: PlacementNodeProps) {
   const sessionRef = useRef<GestureSession | null>(null);
   useEffect(() => () => sessionRef.current?.cleanup(), []);
 
+  /** 클라이언트 좌표 → 슬롯 로컬 좌표 (레이어 오프셋·스테이지 배율 역산) */
   const toLocal = (clientX: number, clientY: number) => {
-    const box = groupRef.current
-      ?.getStage()
-      ?.container()
-      .getBoundingClientRect();
-    return {
-      x: (clientX - (box?.left ?? 0)) / stageScale - rect.x,
-      y: (clientY - (box?.top ?? 0)) / stageScale - rect.y,
-    };
+    const node = groupRef.current;
+    const box = node?.getStage()?.container().getBoundingClientRect();
+    if (!node || !box) return { x: 0, y: 0 };
+    return node
+      .getAbsoluteTransform()
+      .copy()
+      .invert()
+      .point({ x: clientX - box.left, y: clientY - box.top });
   };
 
   /** 데스크톱 커서 힌트 — 미선택 pointer(탭 유도), 선택됨 grab, 드래그 중 grabbing */
@@ -572,12 +669,15 @@ const ROTATE_PATHS = [
 interface SelectionControlsProps {
   variantData: FrameTemplate["variants"]["post"];
   stageScale: number;
+  /** 스테이지 전체 영역 (프레임 좌표계 기준) — 제스처 표면·버튼 클램프 범위 */
+  stageArea: { x: number; y: number; width: number; height: number };
 }
 
 /** 선택 테두리 + ✕(사진 삭제)·⟳(궤도 회전 핸들) 오버레이 — 📷는 DOM(ReplaceButton) (스펙 06) */
 function SelectionControls({
   variantData,
   stageScale,
+  stageArea,
 }: SelectionControlsProps) {
   const selected = useEditorStore((s) => s.selectedSlot);
   const photo = useEditorStore((s) =>
@@ -627,11 +727,19 @@ function SelectionControls({
   );
   const drawnW = photoSize.width * stored.scale;
   const drawnH = photoSize.height * stored.scale;
-  const { width: canvasW, height: canvasH } = variantData.canvas;
   /** 화면 픽셀 크기 고정용 — 스테이지 스케일 역산 */
   const px = (n: number) => n / stageScale;
-  const clampX = (v: number) => Math.min(Math.max(v, px(22)), canvasW - px(22));
-  const clampY = (v: number) => Math.min(Math.max(v, px(22)), canvasH - px(22));
+  // 버튼은 프레임이 아니라 스테이지(편집 영역 전체) 안으로 클램프 — 프레임 밖 여백도 쓴다
+  const clampX = (v: number) =>
+    Math.min(
+      Math.max(v, stageArea.x + px(22)),
+      stageArea.x + stageArea.width - px(22),
+    );
+  const clampY = (v: number) =>
+    Math.min(
+      Math.max(v, stageArea.y + px(22)),
+      stageArea.y + stageArea.height - px(22),
+    );
 
   const closeX = clampX(rect.x + rect.width);
   const closeY = clampY(rect.y);
@@ -695,16 +803,31 @@ function SelectionControls({
     rotateSession.current = { cleanup };
   };
 
-  /** 클라이언트 좌표 → 캔버스 좌표 */
+  /** 클라이언트 좌표 → 프레임(템플릿) 좌표 — 레이어 오프셋·스테이지 배율을 함께 역산 */
   const toCanvas = (clientX: number, clientY: number) => {
-    const box = groupRef.current
-      ?.getStage()
-      ?.container()
-      .getBoundingClientRect();
-    return {
-      x: (clientX - (box?.left ?? 0)) / stageScale,
-      y: (clientY - (box?.top ?? 0)) / stageScale,
-    };
+    const node = groupRef.current;
+    const box = node?.getStage()?.container().getBoundingClientRect();
+    if (!node || !box) return { x: 0, y: 0 };
+    return node
+      .getAbsoluteTransform()
+      .copy()
+      .invert()
+      .point({ x: clientX - box.left, y: clientY - box.top });
+  };
+
+  /** 사진의 회전된 바운딩 박스 안인가 — 한 손가락 드래그 허용 범위 판정 */
+  const isInsidePhoto = (clientX: number, clientY: number) => {
+    const p = toCanvas(clientX, clientY);
+    const cx = rect.x + rect.width / 2 + stored.x;
+    const cy = rect.y + rect.height / 2 + stored.y;
+    const cos = Math.cos(-stored.rotation);
+    const sin = Math.sin(-stored.rotation);
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    return (
+      Math.abs(dx * cos - dy * sin) <= drawnW / 2 &&
+      Math.abs(dx * sin + dy * cos) <= drawnH / 2
+    );
   };
 
   const setCursor = (cursor: string) => {
@@ -735,8 +858,10 @@ function SelectionControls({
   };
 
   /**
-   * 제스처 표면 세션 — 선택된 사진의 전체 바운딩 박스(고스트 영역 포함)에서
-   * 드래그/핀치를 받는다 (기획 요청 2026-07-29: 터치 영역을 슬롯 크기로 제한하지 말 것)
+   * 제스처 표면 세션 — 표면이 편집 영역 전체를 덮는다 (기획 요청 2026-07-29).
+   * 핀치(두 손가락)는 사진 밖 어디서 시작해도 배율이 조정된다 — 구멍이 작은 프레임에서
+   * 비율 조정이 어렵다는 피드백 반영. 한 손가락 드래그는 사진(고스트 포함) 위에서만
+   * 이동으로 해석하고, 밖에서 시작하면 탭(해제) 판정만 남긴다.
    */
   const startGesture = (e: Konva.KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault();
@@ -750,7 +875,8 @@ function SelectionControls({
       return;
     }
     const pointers = new Map([[e.evt.pointerId, point]]);
-    setCursor("grabbing");
+    const canDrag = isInsidePhoto(e.evt.clientX, e.evt.clientY);
+    if (canDrag) setCursor("grabbing");
     const onMove = (ev: PointerEvent) => {
       const s = gestureSession.current;
       if (!s || !s.pointers.has(ev.pointerId)) return;
@@ -760,7 +886,7 @@ function SelectionControls({
         const dx = (ev.clientX - prev.x) / stageScale;
         const dy = (ev.clientY - prev.y) / stageScale;
         s.moved += Math.abs(dx) + Math.abs(dy);
-        if (s.moved > 3) {
+        if (s.moved > 3 && s.canDrag) {
           applySlotUpdate(selected, rect, (current, size) =>
             clampTransform(
               { ...current, x: current.x + dx, y: current.y + dy },
@@ -796,7 +922,7 @@ function SelectionControls({
       if (s.pointers.size > 0) return;
       s.cleanup();
       gestureSession.current = null;
-      setCursor("grab");
+      setCursor("");
       if (s.moved < 6) handleSurfaceTap(ev.clientX, ev.clientY);
     };
     const cleanup = () => {
@@ -807,7 +933,13 @@ function SelectionControls({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-    gestureSession.current = { pointers, moved: 0, lastDist: null, cleanup };
+    gestureSession.current = {
+      pointers,
+      moved: 0,
+      lastDist: null,
+      canDrag,
+      cleanup,
+    };
   };
 
   /** ✕ — 선택된 사진 삭제 (탭 완료 시점, 합성 이벤트 중복 방어) */
@@ -820,16 +952,14 @@ function SelectionControls({
 
   return (
     <Group ref={groupRef}>
-      {/* 제스처 표면 — 슬롯 밖으로 잘려 보이는 원본(고스트) 영역까지 드래그/핀치/휠을 받는다 */}
+      {/* 제스처 표면 — 편집 영역 전체. 핀치/휠 줌은 사진 밖에서도 동작하고,
+          한 손가락 드래그는 사진(고스트 포함) 위에서 시작한 경우만 이동한다 */}
       <Rect
         name="gesture-surface"
-        x={rect.x + rect.width / 2 + stored.x}
-        y={rect.y + rect.height / 2 + stored.y}
-        offsetX={drawnW / 2}
-        offsetY={drawnH / 2}
-        width={drawnW}
-        height={drawnH}
-        rotation={(stored.rotation * 180) / Math.PI}
+        x={stageArea.x}
+        y={stageArea.y}
+        width={stageArea.width}
+        height={stageArea.height}
         opacity={0}
         fill="#000"
         onPointerDown={startGesture}
@@ -856,8 +986,9 @@ function SelectionControls({
             );
           }
         }}
-        onMouseOver={() => {
-          if (!gestureSession.current) setCursor("grab");
+        onMouseMove={(e) => {
+          if (gestureSession.current) return;
+          setCursor(isInsidePhoto(e.evt.clientX, e.evt.clientY) ? "grab" : "");
         }}
         onMouseOut={() => {
           if (!gestureSession.current) setCursor("");
