@@ -23,6 +23,14 @@ const RATIO_LABEL: Record<VariantId, string> = {
   story: "Story 9:16",
 };
 
+/** 파일 메뉴 앵커 — 탭한 슬롯의 화면(viewport) rect */
+export interface SlotAnchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export function EditorShell({ template }: { template: FrameTemplate }) {
   const router = useRouter();
   const variant = useEditorStore((s) => s.variant);
@@ -56,9 +64,19 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
     return () => clearTimeout(timer);
   }, [notice, setNotice]);
 
-  const handleSlotTap = (slotId: string) => {
+  const handleSlotTap = (slotId: string, anchor?: SlotAnchor) => {
     pendingSlotRef.current = slotId;
-    fileInputRef.current?.click();
+    const input = fileInputRef.current;
+    if (!input) return;
+    // iOS는 파일 메뉴를 input 요소 rect에 앵커링한다 — 크기 없는 앵커면 원형 폴백 판이
+    // 그려지므로, 탭한 슬롯의 화면 rect에 input을 겹쳐 메뉴가 슬롯에서 펼쳐지게 한다
+    if (anchor) {
+      input.style.left = `${anchor.x}px`;
+      input.style.top = `${anchor.y}px`;
+      input.style.width = `${Math.max(anchor.width, 1)}px`;
+      input.style.height = `${Math.max(anchor.height, 1)}px`;
+    }
+    input.click();
   };
 
   const handleFile = async (file: File | undefined) => {
@@ -215,8 +233,8 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
         exportRef={exportRef}
       />
 
-      {/* display:none이면 iOS Safari가 파일 메뉴 뒤에 앵커 프리뷰(원형 블롭)를 그린다 —
-          시각적으로만 숨겨 하단 중앙에 두면 일반 바텀 시트로 뜬다 */}
+      {/* display:none이면 iOS Safari가 파일 메뉴 앵커를 못 잡아 원형 폴백 판을 그린다 —
+          시각적으로만 숨기고, 클릭 직전에 handleSlotTap이 탭한 슬롯 rect 위로 옮겨 앵커링한다 */}
       <input
         ref={fileInputRef}
         type="file"

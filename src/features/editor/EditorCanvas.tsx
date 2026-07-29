@@ -26,17 +26,37 @@ import {
   type PhotoTransform,
   type Size,
 } from "./transform";
+import type { SlotAnchor } from "./EditorShell";
 import { useImageElement } from "./use-image";
 
 /** 내보내기 함수 시그니처 — 메인 레이어를 캔버스 좌표계 네이티브 해상도로 래스터화 (스펙 04) */
 export type ExportFn = () => HTMLCanvasElement | null;
 
+/** 파일 선택 트리거 — anchor는 iOS 파일 메뉴가 펼쳐질 슬롯의 화면 rect */
+type SlotTapHandler = (slotId: string, anchor?: SlotAnchor) => void;
+
 interface EditorCanvasProps {
   template: FrameTemplate;
   /** 빈 슬롯 탭·교체(📷) 공통 — 파일 선택 트리거 */
-  onSlotTap: (slotId: string) => void;
+  onSlotTap: SlotTapHandler;
   /** EditorShell이 다운로드 시 호출할 내보내기 함수를 여기 담아준다 */
   exportRef: React.MutableRefObject<ExportFn | null>;
+}
+
+/** 캔버스 rect → 화면(viewport) rect — iOS 파일 메뉴 앵커용 */
+function slotAnchorFor(
+  node: Konva.Node | null,
+  rect: { x: number; y: number; width: number; height: number },
+  stageScale: number,
+): SlotAnchor | undefined {
+  const box = node?.getStage()?.container().getBoundingClientRect();
+  if (!box) return undefined;
+  return {
+    x: box.left + rect.x * stageScale,
+    y: box.top + rect.y * stageScale,
+    width: rect.width * stageScale,
+    height: rect.height * stageScale,
+  };
 }
 
 /**
@@ -243,7 +263,7 @@ function EmptySlotBadge({ placement }: { placement: TemplatePlacement }) {
 
 interface PlacementNodeProps {
   placement: TemplatePlacement;
-  onSlotTap: (slotId: string) => void;
+  onSlotTap: SlotTapHandler;
   stageScale: number;
 }
 
@@ -412,7 +432,10 @@ function PlacementNode({
         if (photo) {
           setSelectedSlot(selected ? null : placement.slot);
         } else {
-          onSlotTap(placement.slot);
+          onSlotTap(
+            placement.slot,
+            slotAnchorFor(groupRef.current, rect, stageScale),
+          );
         }
       }
     };
@@ -499,7 +522,7 @@ const ROTATE_PATHS = [
 interface SelectionControlsProps {
   variantData: FrameTemplate["variants"]["post"];
   stageScale: number;
-  onReplace: (slotId: string) => void;
+  onReplace: SlotTapHandler;
 }
 
 /** 선택 테두리 + ✕(사진 삭제)·📷(교체)·⟳(궤도 회전 핸들) 오버레이 (스펙 06) */
@@ -535,11 +558,11 @@ function SelectionControls({
   // 한 번의 물리 탭이 브라우저에 따라 click/tap/pointerclick 여러 konva 이벤트로 합성되므로
   // (iOS는 pointer+touch+호환 mouse를 모두 발사) 짧은 창 안의 중복 실행을 막는다
   const lastFire = useRef<Record<string, number>>({});
-  const once = (key: string, fn: () => void) => () => {
+  const fireOnce = (key: string) => {
     const now = Date.now();
-    if (now - (lastFire.current[key] ?? 0) < 400) return;
+    if (now - (lastFire.current[key] ?? 0) < 400) return false;
     lastFire.current[key] = now;
-    fn();
+    return true;
   };
 
   const placement = variantData.placements.find((p) => p.slot === selected);
@@ -662,7 +685,11 @@ function SelectionControls({
     } else if (state.photos[hit.slot]) {
       setSelectedSlot(hit.slot); // 다른 사진 → 선택 전환
     } else {
-      onReplace(hit.slot); // 빈 슬롯 → 파일 선택 (기존 동작)
+      // 빈 슬롯 → 파일 선택 (기존 동작)
+      onReplace(
+        hit.slot,
+        slotAnchorFor(groupRef.current, hit.rect, stageScale),
+      );
     }
   };
 
@@ -742,6 +769,18 @@ function SelectionControls({
     gestureSession.current = { pointers, moved: 0, lastDist: null, cleanup };
   };
 
+  /** ✕ — 선택된 사진 삭제 (탭 완료 시점, 합성 이벤트 중복 방어) */
+  const handleRemoveTap = () => {
+    if (!fireOnce("remove")) return;
+    removePhoto(selected);
+  };
+
+  /** 📷 — 사진 교체: 파일 메뉴가 슬롯에서 펼쳐지도록 앵커를 함께 넘긴다 */
+  const handleReplaceTap = () => {
+    if (!fireOnce("replace")) return;
+    onReplace(selected, slotAnchorFor(groupRef.current, rect, stageScale));
+  };
+
   const iconScale = px(15) / 24;
 
   return (
@@ -811,9 +850,9 @@ function SelectionControls({
           e.evt.preventDefault();
           e.cancelBubble = true;
         }}
-        onClick={once("remove", () => removePhoto(selected))}
-        onTap={once("remove", () => removePhoto(selected))}
-        onPointerClick={once("remove", () => removePhoto(selected))}
+        onClick={handleRemoveTap}
+        onTap={handleRemoveTap}
+        onPointerClick={handleRemoveTap}
         onMouseEnter={() => {
           const c = groupRef.current?.getStage()?.container();
           if (c) c.style.cursor = "pointer";
@@ -851,9 +890,9 @@ function SelectionControls({
           e.evt.preventDefault();
           e.cancelBubble = true;
         }}
-        onClick={once("replace", () => onReplace(selected))}
-        onTap={once("replace", () => onReplace(selected))}
-        onPointerClick={once("replace", () => onReplace(selected))}
+        onClick={handleReplaceTap}
+        onTap={handleReplaceTap}
+        onPointerClick={handleReplaceTap}
         onMouseEnter={() => {
           const c = groupRef.current?.getStage()?.container();
           if (c) c.style.cursor = "pointer";
