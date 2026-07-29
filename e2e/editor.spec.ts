@@ -567,6 +567,38 @@ test("비율 전환 시 사진이 유지된다", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("캔버스 바깥 페이지 영역 탭으로도 선택이 해제된다 (스펙 06)", async ({
+  page,
+}) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  // 자동 선택 → 고스트 확인
+  const { rect } = frame01.variants.post.placements[0];
+  const canvas = page.locator('[data-testid="editor-canvas"] canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const scale = box.width / frame01.variants.post.canvas.width;
+  const probe = {
+    x: box.x + (rect.x - 40) * scale,
+    y: box.y + (rect.y + rect.height / 2) * scale,
+  };
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeGreaterThan(40);
+
+  // 캔버스 아래 페이지 여백 탭 → 해제 (슬롯이 캔버스를 꽉 채우는 프레임의 유일한 해제 공간)
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height + 20);
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeLessThan(10);
+});
+
 test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 표면, 스펙 06)", async ({
   page,
 }) => {

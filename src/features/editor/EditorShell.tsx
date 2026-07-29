@@ -143,8 +143,22 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
     }, "image/png");
   };
 
+  /**
+   * 캔버스 바깥 페이지 영역 탭 → 선택 해제 (기획 피드백 2026-07-29).
+   * 슬롯이 캔버스 너비를 꽉 채우는 프레임은 캔버스 안에 "해제할 배경"이 없어
+   * 페이지 여백이 유일한 해제 공간이다. 캔버스·버튼·링크·input은 각자 처리하므로 제외.
+   */
+  const handleBackgroundPointerDown = (e: React.PointerEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("canvas, button, a, input")) return;
+    setSelectedSlot(null);
+  };
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      onPointerDown={handleBackgroundPointerDown}
+    >
       {/* 참고 시안: 48px 풀블리드 반투명 블러 바 + 0.5px 헤어라인 */}
       <header className="bg-surface/85 relative flex h-12 shrink-0 items-center justify-between border-b-[0.5px] border-black/10 pr-3 pl-2 backdrop-blur-[20px]">
         <Link
