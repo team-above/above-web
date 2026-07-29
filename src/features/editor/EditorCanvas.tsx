@@ -174,25 +174,39 @@ export default function EditorCanvas({
               </Layer>
             </Stage>
             {/* 파일 선택 트리거는 반드시 DOM 버튼 — iOS 파일 메뉴가 이 버튼에 작게 앵커된다.
-                캔버스(Konva)에서 열면 캔버스 크기의 프리뷰 판이 그려진다 (스펙 06 변경 이력) */}
+                캔버스(Konva)에서 열면 캔버스 크기의 프리뷰 판이 그려진다 (스펙 06 변경 이력).
+                보이는 원은 캔버스 배율을 따라 작게(원 디자인 68px), 탭 영역은 44px 보장 */}
             {variantData.placements
               .filter((p) => !photos[p.slot])
-              .map((p) => (
-                <button
-                  key={p.slot}
-                  type="button"
-                  aria-label="사진 추가"
-                  data-testid={`attach-${p.slot}`}
-                  className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/92 text-[26px] font-light text-[#333] shadow-[0_1px_6px_rgba(0,0,0,0.2)]"
-                  style={{
-                    left: (p.rect.x + p.rect.width / 2) * fitted.scale,
-                    top: (p.rect.y + p.rect.height / 2) * fitted.scale,
-                  }}
-                  onClick={() => onSlotTap(p.slot)}
-                >
-                  +
-                </button>
-              ))}
+              .map((p) => {
+                const badge = Math.round(68 * fitted.scale);
+                return (
+                  <button
+                    key={p.slot}
+                    type="button"
+                    aria-label="사진 추가"
+                    data-testid={`attach-${p.slot}`}
+                    className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
+                    style={{
+                      left: (p.rect.x + p.rect.width / 2) * fitted.scale,
+                      top: (p.rect.y + p.rect.height / 2) * fitted.scale,
+                    }}
+                    onClick={() => onSlotTap(p.slot)}
+                  >
+                    <span
+                      aria-hidden
+                      className="flex items-center justify-center rounded-full bg-white/92 font-light text-[#333] shadow-[0_1px_4px_rgba(0,0,0,0.18)]"
+                      style={{
+                        width: badge,
+                        height: badge,
+                        fontSize: Math.round(badge * 0.58),
+                      }}
+                    >
+                      +
+                    </span>
+                  </button>
+                );
+              })}
             <ReplaceButton
               variantData={variantData}
               stageScale={fitted.scale}
@@ -276,25 +290,30 @@ function ReplaceButton({
       type="button"
       aria-label="사진 교체"
       data-testid="replace-photo"
-      className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white text-[#1c1c1e] shadow-[0_1px_6px_rgba(0,0,0,0.25)]"
+      className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
       style={{ left, top }}
       onClick={() => onReplace(selectedSlot)}
     >
-      <svg
-        width="19"
-        height="19"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+      {/* 보이는 원은 기존 Konva 버튼과 같은 36px — 탭 영역은 바깥 44px */}
+      <span
         aria-hidden
+        className="flex size-9 items-center justify-center rounded-full bg-white text-[#1c1c1e] shadow-[0_1px_5px_rgba(0,0,0,0.25)]"
       >
-        {CAMERA_PATHS.map((d) => (
-          <path key={d} d={d} />
-        ))}
-      </svg>
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {CAMERA_PATHS.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </svg>
+      </span>
     </button>
   );
 }
