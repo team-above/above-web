@@ -1,5 +1,6 @@
 "use client";
 
+import KonvaLib from "konva";
 import type Konva from "konva";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -27,8 +28,37 @@ import {
 } from "./transform";
 import { useImageElement } from "./use-image";
 
+/**
+ * 미리보기 캔버스 해상도 상한. DPR 3 기기에서 화면 전체 캔버스 3장을 3배 해상도로 다시
+ * 칠하면 조작 중 프레임이 밀린다 (실측 p90 54ms → 상한 2에서 25ms, 32ms 초과 프레임 0).
+ * 내보내기는 `toCanvas()`가 pixelRatio 1(템플릿 원본 해상도)을 쓰므로 영향받지 않는다.
+ */
+const MAX_PREVIEW_PIXEL_RATIO = 2;
+if (typeof window !== "undefined") {
+  KonvaLib.pixelRatio = Math.min(
+    window.devicePixelRatio || 1,
+    MAX_PREVIEW_PIXEL_RATIO,
+  );
+}
+
 /** 내보내기 함수 시그니처 — 메인 레이어를 캔버스 좌표계 네이티브 해상도로 래스터화 (스펙 04) */
 export type ExportFn = () => HTMLCanvasElement | null;
+
+/** 슬롯 그룹 이름 — 내보내기 직전 원본 해상도 재캐시 대상을 찾는 데 쓴다 */
+const SLOT_GROUP_NAME = "slot-group";
+
+/**
+ * 슬롯 마스크 캐시 해상도. 조작 중 매 프레임 다시 구워지므로 화면에 보이는 크기로 맞춘다 —
+ * 기본값(devicePixelRatio)은 템플릿 원본(1080폭) 기준이라 큰 슬롯에서 프레임당 수백만
+ * 픽셀을 새로 그리게 되어 드래그·핀치가 끊긴다. 내보내기 직전에만 원본 해상도로 다시 굽는다.
+ */
+function previewCachePixelRatio(stageScale: number): number {
+  const dpr =
+    typeof window === "undefined"
+      ? 1
+      : Math.min(window.devicePixelRatio || 1, MAX_PREVIEW_PIXEL_RATIO);
+  return Math.min(Math.max(stageScale * dpr, 0.5), MAX_PREVIEW_PIXEL_RATIO);
+}
 
 interface EditorCanvasProps {
   template: FrameTemplate;
@@ -140,8 +170,11 @@ export default function EditorCanvas({
       })()
     : null;
 
+  const cachePixelRatio = fitted ? previewCachePixelRatio(fitted.scale) : 1;
+
   // 내보내기: 스테이지를 잠시 1:1 프레임 크기로 되돌려 메인 레이어만 래스터화
-  // (UI·선택 레이어 제외). 레이어 오프셋·라운드 클립도 함께 걷어낸다
+  // (UI·선택 레이어 제외). 레이어 오프셋·라운드 클립을 걷어내고,
+  // 슬롯 마스크 캐시는 미리보기 해상도 → 원본 해상도로 다시 구운 뒤 되돌린다
   useEffect(() => {
     exportRef.current = () => {
       const stage = stageRef.current;
@@ -154,6 +187,21 @@ export default function EditorCanvas({
         position: layer.position(),
         clipFunc: layer.clipFunc(),
       };
+      const slots = layer
+        .find(`.${SLOT_GROUP_NAME}`)
+        .filter((node) => node.isCached());
+      const recache = (pixelRatio: number) => {
+        for (const node of slots) {
+          node.cache({
+            x: 0,
+            y: 0,
+            width: node.getAttr("slotWidth"),
+            height: node.getAttr("slotHeight"),
+            pixelRatio,
+          });
+        }
+      };
+      recache(1); // 원본(템플릿) 해상도 — 내보내기 화질 보장
       layer.clipFunc(undefined); // 미리보기용 라운드 코너는 내보내기에 넣지 않는다
       layer.position({ x: 0, y: 0 });
       stage.scale({ x: 1, y: 1 });
@@ -163,13 +211,14 @@ export default function EditorCanvas({
       layer.position(prev.position);
       stage.scale({ x: prev.scale, y: prev.scale });
       stage.size({ width: prev.width, height: prev.height });
+      recache(cachePixelRatio); // 미리보기 해상도로 복귀
       stage.batchDraw();
       return canvas;
     };
     return () => {
       exportRef.current = null;
     };
-  }, [exportRef, variantData]);
+  }, [exportRef, variantData, cachePixelRatio]);
 
   return (
     <div
@@ -232,6 +281,7 @@ export default function EditorCanvas({
                     key={placement.slot}
                     placement={placement}
                     stageScale={fitted.scale}
+                    cachePixelRatio={cachePixelRatio}
                   />
                 ))}
                 {overlay && <KonvaImage image={overlay} listening={false} />}
@@ -415,6 +465,8 @@ function ReplaceButton({
 interface PlacementNodeProps {
   placement: TemplatePlacement;
   stageScale: number;
+  /** 슬롯 마스크 캐시 해상도 — 미리보기는 화면 크기, 내보내기 직전에만 원본(1) */
+  cachePixelRatio: number;
 }
 
 interface GestureSession {
@@ -427,8 +479,18 @@ interface GestureSession {
   cleanup: () => void;
 }
 
-/** 사진 + 마스크(destination-in) 합성과 탭(선택)/드래그/핀치 제스처를 담당하는 슬롯 노드 */
-function PlacementNode({ placement, stageScale }: PlacementNodeProps) {
+/**
+ * 사진 + 마스크(destination-in) 합성과 탭(선택)/드래그/핀치 제스처를 담당하는 슬롯 노드.
+ *
+ * 마스크는 구멍 모양(별·낙서)뿐 아니라 **구멍 안의 글자·장식(frame04 요일 라벨 등)도**
+ * 사진에서 파낸다 — overlay만으로는 그 부분이 반투명이라 사진이 비쳐 흐려진다.
+ * 그래서 합성은 유지하되, 캐시 해상도를 화면 크기에 맞춰 조작 중 비용을 낮춘다.
+ */
+function PlacementNode({
+  placement,
+  stageScale,
+  cachePixelRatio,
+}: PlacementNodeProps) {
   const { rect } = placement;
   const photo = useEditorStore((s) => s.photos[placement.slot]);
   const focal = useEditorStore((s) => s.focals[placement.slot]);
@@ -454,7 +516,13 @@ function PlacementNode({ placement, stageScale }: PlacementNodeProps) {
     const group = groupRef.current;
     if (!group) return;
     if (ready) {
-      group.cache({ x: 0, y: 0, width: rect.width, height: rect.height });
+      group.cache({
+        x: 0,
+        y: 0,
+        width: rect.width,
+        height: rect.height,
+        pixelRatio: cachePixelRatio,
+      });
     } else {
       group.clearCache();
     }
@@ -470,6 +538,7 @@ function PlacementNode({ placement, stageScale }: PlacementNodeProps) {
     stored?.rotation,
     rect.width,
     rect.height,
+    cachePixelRatio,
   ]);
 
   const sessionRef = useRef<GestureSession | null>(null);
@@ -598,7 +667,15 @@ function PlacementNode({ placement, stageScale }: PlacementNodeProps) {
   };
 
   return (
-    <Group ref={groupRef} x={rect.x} y={rect.y}>
+    <Group
+      ref={groupRef}
+      x={rect.x}
+      y={rect.y}
+      // 내보내기 직전 원본 해상도 재캐시용 — 이름·슬롯 크기를 노드에 실어둔다
+      name={SLOT_GROUP_NAME}
+      slotWidth={rect.width}
+      slotHeight={rect.height}
+    >
       {/* 히트 영역 — 별무리처럼 마스크가 희소해도 rect 전체가 탭 대상 (스펙 03) */}
       <Rect
         width={rect.width}

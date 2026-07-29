@@ -302,16 +302,21 @@ test("선택하면 고스트·테두리가 보이고, 배경 탭으로 해제된
   await (
     await chooserPromise
   ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  // 슬롯 중앙은 픽스처의 빨강/파랑 경계라 리샘플링에 섞인다 — 경계에서 떨어진 지점으로 판정
+  const { rect } = frame01.variants.post.placements[0];
+  const frame = await frameMapper(page);
+  const insideRed = frame.at(
+    rect.x + rect.width * 0.2,
+    rect.y + rect.height / 2,
+  );
   await expect
     .poll(async () => {
-      const p = await pixelAt(page, center);
+      const p = await pixelAt(page, insideRed);
       return Math.max(p.r, p.b);
     })
     .toBeGreaterThan(150);
 
   // 첨부 직후 자동 선택 → 슬롯 왼쪽 바깥에 고스트(빨강)가 보인다
-  const { rect } = frame01.variants.post.placements[0];
-  const frame = await frameMapper(page);
   const outside = frame.at(rect.x - 40, rect.y + rect.height / 2);
   await expect
     .poll(async () => (await ghostAt(page, outside)).a)
