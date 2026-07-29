@@ -474,8 +474,6 @@ interface GestureSession {
   /** 누적 이동량 (캔버스 좌표 단위) — 탭/드래그 판별 */
   moved: number;
   lastDist: number | null;
-  /** 한 손가락 드래그를 이동으로 해석할지 — 사진 밖에서 시작하면 false (핀치는 항상 허용) */
-  canDrag?: boolean;
   cleanup: () => void;
 }
 
@@ -760,13 +758,6 @@ function SelectionControls({
   const photo = useEditorStore((s) =>
     selected ? s.photos[selected] : undefined,
   );
-  const focal = useEditorStore((s) =>
-    selected ? s.focals[selected] : undefined,
-  );
-  const rotation = useEditorStore((s) =>
-    selected ? (s.rotations[selected] ?? 0) : 0,
-  );
-  const zoom = useEditorStore((s) => (selected ? (s.zooms[selected] ?? 1) : 1));
   const removePhoto = useEditorStore((s) => s.removePhoto);
   const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
   const groupRef = useRef<Konva.Group>(null);
@@ -793,17 +784,6 @@ function SelectionControls({
   const placement = variantData.placements.find((p) => p.slot === selected);
   if (!placement || !photo || !selected) return null;
   const { rect } = placement;
-  const photoSize = { width: photo.bitmap.width, height: photo.bitmap.height };
-  // 제스처 표면 배치용 — 메인 레이어의 사진과 같은 변환
-  const stored = composeTransform(
-    focal ?? null,
-    zoom,
-    rotation,
-    photoSize,
-    rect,
-  );
-  const drawnW = photoSize.width * stored.scale;
-  const drawnH = photoSize.height * stored.scale;
   /** 화면 픽셀 크기 고정용 — 스테이지 스케일 역산 */
   const px = (n: number) => n / stageScale;
   // 버튼은 프레임이 아니라 스테이지(편집 영역 전체) 안으로 클램프 — 프레임 밖 여백도 쓴다
@@ -892,21 +872,6 @@ function SelectionControls({
       .point({ x: clientX - box.left, y: clientY - box.top });
   };
 
-  /** 사진의 회전된 바운딩 박스 안인가 — 한 손가락 드래그 허용 범위 판정 */
-  const isInsidePhoto = (clientX: number, clientY: number) => {
-    const p = toCanvas(clientX, clientY);
-    const cx = rect.x + rect.width / 2 + stored.x;
-    const cy = rect.y + rect.height / 2 + stored.y;
-    const cos = Math.cos(-stored.rotation);
-    const sin = Math.sin(-stored.rotation);
-    const dx = p.x - cx;
-    const dy = p.y - cy;
-    return (
-      Math.abs(dx * cos - dy * sin) <= drawnW / 2 &&
-      Math.abs(dx * sin + dy * cos) <= drawnH / 2
-    );
-  };
-
   const setCursor = (cursor: string) => {
     const c = groupRef.current?.getStage()?.container();
     if (c) c.style.cursor = cursor;
@@ -936,9 +901,9 @@ function SelectionControls({
 
   /**
    * 제스처 표면 세션 — 표면이 편집 영역 전체를 덮는다 (기획 요청 2026-07-29).
-   * 핀치(두 손가락)는 사진 밖 어디서 시작해도 배율이 조정된다 — 구멍이 작은 프레임에서
-   * 비율 조정이 어렵다는 피드백 반영. 한 손가락 드래그는 사진(고스트 포함) 위에서만
-   * 이동으로 해석하고, 밖에서 시작하면 탭(해제) 판정만 남긴다.
+   * **선택된 사진이 편집 영역 전체를 소유한다**: 핀치(배율)도 드래그(이동)도 사진 밖
+   * 어디서 시작해도 동작한다 — 구멍이 작은 프레임에서 조작이 어렵다는 피드백 반영.
+   * 움직임이 거의 없으면 탭으로 보고 해제/선택 전환을 처리한다.
    */
   const startGesture = (e: Konva.KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault();
@@ -952,8 +917,7 @@ function SelectionControls({
       return;
     }
     const pointers = new Map([[e.evt.pointerId, point]]);
-    const canDrag = isInsidePhoto(e.evt.clientX, e.evt.clientY);
-    if (canDrag) setCursor("grabbing");
+    setCursor("grabbing");
     const onMove = (ev: PointerEvent) => {
       const s = gestureSession.current;
       if (!s || !s.pointers.has(ev.pointerId)) return;
@@ -963,7 +927,7 @@ function SelectionControls({
         const dx = (ev.clientX - prev.x) / stageScale;
         const dy = (ev.clientY - prev.y) / stageScale;
         s.moved += Math.abs(dx) + Math.abs(dy);
-        if (s.moved > 3 && s.canDrag) {
+        if (s.moved > 3) {
           applySlotUpdate(selected, rect, (current, size) =>
             clampTransform(
               { ...current, x: current.x + dx, y: current.y + dy },
@@ -1010,13 +974,7 @@ function SelectionControls({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-    gestureSession.current = {
-      pointers,
-      moved: 0,
-      lastDist: null,
-      canDrag,
-      cleanup,
-    };
+    gestureSession.current = { pointers, moved: 0, lastDist: null, cleanup };
   };
 
   /** ✕ — 선택된 사진 삭제 (탭 완료 시점, 합성 이벤트 중복 방어) */
@@ -1063,9 +1021,9 @@ function SelectionControls({
             );
           }
         }}
-        onMouseMove={(e) => {
-          if (gestureSession.current) return;
-          setCursor(isInsidePhoto(e.evt.clientX, e.evt.clientY) ? "grab" : "");
+        onMouseOver={() => {
+          // 선택 중에는 편집 영역 어디서나 드래그로 이동한다 — 커서로 그 사실을 알린다
+          if (!gestureSession.current) setCursor("grab");
         }}
         onMouseOut={() => {
           if (!gestureSession.current) setCursor("");

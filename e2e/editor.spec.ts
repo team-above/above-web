@@ -741,6 +741,41 @@ test("사진 밖에서 핀치해도 배율이 조정된다 (기획 피드백 202
     .toBeGreaterThan(1.15);
 });
 
+test("사진 밖에서 드래그해도 사진이 이동한다 (기획 피드백 2026-07-29)", async ({
+  page,
+}) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  // 좌 빨강/우 파랑 사진 — 중앙은 경계색, 이동하면 한쪽 색이 중앙에 온다
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.mouse.click(center.x, center.y);
+  await (
+    await chooserPromise
+  ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  // 사진 바운딩 박스 밖(프레임 우측 여백)에서 드래그를 시작한다
+  const { rect } = frame01.variants.post.placements[0];
+  const frame = await frameMapper(page);
+  const outsidePhoto = frame.at(950, rect.y + rect.height / 2);
+  await expect
+    .poll(async () => (await ghostAt(page, outsidePhoto)).a)
+    .toBeLessThan(10); // 고스트조차 없는 = 사진 영역 완전 바깥
+
+  await page.mouse.move(outsidePhoto.x, outsidePhoto.y);
+  await page.mouse.down();
+  await page.mouse.move(outsidePhoto.x + 300, outsidePhoto.y, { steps: 10 });
+  await page.mouse.up();
+
+  // 오른쪽으로 끌었으므로 사진 왼쪽(빨강)이 슬롯 중앙에 온다
+  await expect
+    .poll(async () => {
+      const p = await pixelAt(page, center);
+      return p.r - p.b;
+    })
+    .toBeGreaterThan(100);
+});
+
 test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유, 스펙 06)", async ({
   page,
 }) => {
