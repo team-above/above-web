@@ -483,10 +483,13 @@ test("클릭 가능한 요소에 pointer 커서가 보인다", async ({ page }, 
       .evaluate((el) => getComputedStyle(el).cursor),
   ).not.toBe("pointer");
 
-  // 캔버스 슬롯: 빈 슬롯 호버 → pointer
+  // 빈 슬롯의 + 배지(DOM 버튼) → pointer
   const center = await placementCenter(page, frame01, "post", "left");
-  await page.mouse.move(center.x, center.y);
-  // 커서는 스테이지 컨테이너(부모 div)에 걸리고 캔버스로 상속된다 — computed로 판정
+  expect(
+    await page
+      .locator('[data-testid="attach-left"]')
+      .evaluate((el) => getComputedStyle(el).cursor),
+  ).toBe("pointer");
   const containerCursor = () =>
     page.evaluate(
       () =>
@@ -496,7 +499,6 @@ test("클릭 가능한 요소에 pointer 커서가 보인다", async ({ page }, 
           ) as HTMLElement,
         ).cursor,
     );
-  await expect.poll(containerCursor).toBe("pointer");
 
   // 사진 첨부 후 호버 → grab
   await attachPhoto(page, center);

@@ -11,7 +11,6 @@ import {
   Path,
   Rect,
   Stage,
-  Text,
 } from "react-konva";
 import { fitToViewport } from "@/lib/canvas-size";
 import { useEditorStore } from "@/stores/editor";
@@ -26,43 +25,21 @@ import {
   type PhotoTransform,
   type Size,
 } from "./transform";
-import type { SlotAnchor } from "./EditorShell";
 import { useImageElement } from "./use-image";
 
 /** 내보내기 함수 시그니처 — 메인 레이어를 캔버스 좌표계 네이티브 해상도로 래스터화 (스펙 04) */
 export type ExportFn = () => HTMLCanvasElement | null;
 
-/** 파일 선택 트리거 — anchor는 iOS 파일 메뉴가 펼쳐질 슬롯의 화면 rect */
-type SlotTapHandler = (slotId: string, anchor?: SlotAnchor) => void;
-
 interface EditorCanvasProps {
   template: FrameTemplate;
-  /** 빈 슬롯 탭·교체(📷) 공통 — 파일 선택 트리거 */
-  onSlotTap: SlotTapHandler;
+  /**
+   * 파일 선택 트리거 — 빈 슬롯 + 배지·📷 교체 버튼(DOM 오버레이)에서만 호출된다.
+   * iOS는 숨김 input의 파일 메뉴를 "활성화 요소"에 앵커링하므로, 캔버스 탭에서 열면
+   * 캔버스 크기의 프리뷰 판(블롭)이 그려진다 — 반드시 작은 DOM 버튼이 트리거여야 한다.
+   */
+  onSlotTap: (slotId: string) => void;
   /** EditorShell이 다운로드 시 호출할 내보내기 함수를 여기 담아준다 */
   exportRef: React.MutableRefObject<ExportFn | null>;
-}
-
-/**
- * 캔버스 지점 → 버튼 크기(48px)의 화면 앵커 — iOS 파일 메뉴 앵커용.
- * iOS는 메뉴 뒤 프리뷰 판을 앵커 rect 크기로 그리므로, 슬롯 rect 전체를 주면
- * 슬롯만 한 대형 판(블롭)이 생긴다. 버튼 크기 앵커면 판이 메뉴에 붙어 보이지 않는다.
- */
-function anchorAt(
-  node: Konva.Node | null,
-  canvasX: number,
-  canvasY: number,
-  stageScale: number,
-): SlotAnchor | undefined {
-  const box = node?.getStage()?.container().getBoundingClientRect();
-  if (!box) return undefined;
-  const SIZE = 48; // 화면 px
-  return {
-    x: box.left + canvasX * stageScale - SIZE / 2,
-    y: box.top + canvasY * stageScale - SIZE / 2,
-    width: SIZE,
-    height: SIZE,
-  };
 }
 
 /**
@@ -101,6 +78,8 @@ export default function EditorCanvas({
 }: EditorCanvasProps) {
   const variant = useEditorStore((s) => s.variant);
   const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
+  const photos = useEditorStore((s) => s.photos);
+  const selectedSlot = useEditorStore((s) => s.selectedSlot);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -155,7 +134,7 @@ export default function EditorCanvas({
         className="flex h-full w-full touch-none items-center justify-center"
       >
         {fitted && base && (
-          <div className="overflow-hidden rounded-lg bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.1),0_8px_32px_rgba(0,0,0,0.18)]">
+          <div className="relative overflow-hidden rounded-lg bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.1),0_8px_32px_rgba(0,0,0,0.18)]">
             <Stage
               ref={stageRef}
               width={fitted.width}
@@ -175,7 +154,6 @@ export default function EditorCanvas({
                   <PlacementNode
                     key={placement.slot}
                     placement={placement}
-                    onSlotTap={onSlotTap}
                     stageScale={fitted.scale}
                   />
                 ))}
@@ -186,19 +164,42 @@ export default function EditorCanvas({
                 {variantData.placements.map((placement) => (
                   <GhostPhoto key={placement.slot} placement={placement} />
                 ))}
-                {variantData.placements.map((placement) => (
-                  <EmptySlotBadge key={placement.slot} placement={placement} />
-                ))}
               </Layer>
               {/* 선택 컨트롤 레이어 — 역시 내보내기 제외, 버튼은 탭 가능 */}
               <Layer>
                 <SelectionControls
                   variantData={variantData}
                   stageScale={fitted.scale}
-                  onReplace={onSlotTap}
                 />
               </Layer>
             </Stage>
+            {/* 파일 선택 트리거는 반드시 DOM 버튼 — iOS 파일 메뉴가 이 버튼에 작게 앵커된다.
+                캔버스(Konva)에서 열면 캔버스 크기의 프리뷰 판이 그려진다 (스펙 06 변경 이력) */}
+            {variantData.placements
+              .filter((p) => !photos[p.slot])
+              .map((p) => (
+                <button
+                  key={p.slot}
+                  type="button"
+                  aria-label="사진 추가"
+                  data-testid={`attach-${p.slot}`}
+                  className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/92 text-[26px] font-light text-[#333] shadow-[0_1px_6px_rgba(0,0,0,0.2)]"
+                  style={{
+                    left: (p.rect.x + p.rect.width / 2) * fitted.scale,
+                    top: (p.rect.y + p.rect.height / 2) * fitted.scale,
+                  }}
+                  onClick={() => onSlotTap(p.slot)}
+                >
+                  +
+                </button>
+              ))}
+            <ReplaceButton
+              variantData={variantData}
+              stageScale={fitted.scale}
+              selectedSlot={selectedSlot}
+              hasPhoto={Boolean(selectedSlot && photos[selectedSlot])}
+              onReplace={onSlotTap}
+            />
           </div>
         )}
       </div>
@@ -243,33 +244,63 @@ function GhostPhoto({ placement }: { placement: TemplatePlacement }) {
   );
 }
 
-/** 사진 없는 슬롯 중앙의 + 배지 (UI 전용 레이어 — 내보내기·시각 비교 대상 아님) */
-function EmptySlotBadge({ placement }: { placement: TemplatePlacement }) {
-  const hasPhoto = useEditorStore((s) => Boolean(s.photos[placement.slot]));
-  if (hasPhoto) return null;
-  const cx = placement.rect.x + placement.rect.width / 2;
-  const cy = placement.rect.y + placement.rect.height / 2;
+/** 📷 교체 버튼 — DOM 오버레이 (iOS 파일 메뉴가 이 버튼에 앵커되도록 Konva가 아닌 DOM) */
+function ReplaceButton({
+  variantData,
+  stageScale,
+  selectedSlot,
+  hasPhoto,
+  onReplace,
+}: {
+  variantData: FrameTemplate["variants"]["post"];
+  stageScale: number;
+  selectedSlot: string | null;
+  hasPhoto: boolean;
+  onReplace: (slotId: string) => void;
+}) {
+  const placement = variantData.placements.find((p) => p.slot === selectedSlot);
+  if (!placement || !selectedSlot || !hasPhoto) return null;
+  const { rect } = placement;
+  // SelectionControls의 배치 규칙과 동일: 슬롯 아래 바깥, 화면 22px 여백으로 클램프
+  const clamp = (v: number, max: number) => Math.min(Math.max(v, 22), max - 22);
+  const left = clamp(
+    (rect.x + rect.width / 2) * stageScale,
+    variantData.canvas.width * stageScale,
+  );
+  const top = clamp(
+    (rect.y + rect.height) * stageScale + 32,
+    variantData.canvas.height * stageScale,
+  );
   return (
-    <Group>
-      <Circle x={cx} y={cy} radius={34} fill="rgba(255,255,255,0.92)" />
-      <Text
-        x={cx - 34}
-        y={cy - 34}
-        width={68}
-        height={68}
-        text="+"
-        fontSize={40}
-        fill="#333333"
-        align="center"
-        verticalAlign="middle"
-      />
-    </Group>
+    <button
+      type="button"
+      aria-label="사진 교체"
+      data-testid="replace-photo"
+      className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white text-[#1c1c1e] shadow-[0_1px_6px_rgba(0,0,0,0.25)]"
+      style={{ left, top }}
+      onClick={() => onReplace(selectedSlot)}
+    >
+      <svg
+        width="19"
+        height="19"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        {CAMERA_PATHS.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </svg>
+    </button>
   );
 }
 
 interface PlacementNodeProps {
   placement: TemplatePlacement;
-  onSlotTap: SlotTapHandler;
   stageScale: number;
 }
 
@@ -282,11 +313,7 @@ interface GestureSession {
 }
 
 /** 사진 + 마스크(destination-in) 합성과 탭(선택)/드래그/핀치 제스처를 담당하는 슬롯 노드 */
-function PlacementNode({
-  placement,
-  onSlotTap,
-  stageScale,
-}: PlacementNodeProps) {
+function PlacementNode({ placement, stageScale }: PlacementNodeProps) {
   const { rect } = placement;
   const photo = useEditorStore((s) => s.photos[placement.slot]);
   const focal = useEditorStore((s) => s.focals[placement.slot]);
@@ -433,21 +460,13 @@ function PlacementNode({
       s.cleanup();
       sessionRef.current = null;
       hoverCursor();
-      // 이동이 거의 없으면 탭 — 사진은 선택 토글, 빈 슬롯은 파일 선택 (스펙 06)
+      // 이동이 거의 없으면 탭 — 사진은 선택 토글, 빈 슬롯은 해제만
+      // (빈 슬롯의 파일 선택은 + 배지 DOM 버튼 담당 — 캔버스 탭에서 열면 iOS 블롭)
       if (s.moved < 6) {
         if (photo) {
           setSelectedSlot(selected ? null : placement.slot);
         } else {
-          // 앵커 = + 배지(슬롯 중앙) — 파일 메뉴가 배지에서 펼쳐진다
-          onSlotTap(
-            placement.slot,
-            anchorAt(
-              groupRef.current,
-              rect.x + rect.width / 2,
-              rect.y + rect.height / 2,
-              stageScale,
-            ),
-          );
+          setSelectedSlot(null);
         }
       }
     };
@@ -534,14 +553,12 @@ const ROTATE_PATHS = [
 interface SelectionControlsProps {
   variantData: FrameTemplate["variants"]["post"];
   stageScale: number;
-  onReplace: SlotTapHandler;
 }
 
-/** 선택 테두리 + ✕(사진 삭제)·📷(교체)·⟳(궤도 회전 핸들) 오버레이 (스펙 06) */
+/** 선택 테두리 + ✕(사진 삭제)·⟳(궤도 회전 핸들) 오버레이 — 📷는 DOM(ReplaceButton) (스펙 06) */
 function SelectionControls({
   variantData,
   stageScale,
-  onReplace,
 }: SelectionControlsProps) {
   const selected = useEditorStore((s) => s.selectedSlot);
   const photo = useEditorStore((s) =>
@@ -599,9 +616,7 @@ function SelectionControls({
 
   const closeX = clampX(rect.x + rect.width);
   const closeY = clampY(rect.y);
-  // 📷는 슬롯 아래 바깥 — 작은 슬롯에서 사진 위 탭/드래그를 가리지 않는다 (⟳와 대칭)
-  const cameraX = clampX(rect.x + rect.width / 2);
-  const cameraY = clampY(rect.y + rect.height + px(32));
+  // 📷(DOM ReplaceButton)는 슬롯 아래 바깥, ⟳는 위 바깥 — 대칭 배치
   const rotateX = clampX(rect.x + rect.width / 2);
   const rotateY = clampY(rect.y - px(32));
 
@@ -680,7 +695,8 @@ function SelectionControls({
 
   /**
    * 제스처 표면 탭 — 표면이 슬롯·배경을 덮으므로, 탭한 지점 아래의 슬롯 기준으로
-   * 기존 탭 의미를 그대로 재현한다 (재탭=해제, 다른 사진=선택 전환, 빈 슬롯=첨부, 배경=해제)
+   * 기존 탭 의미를 재현한다 (재탭/배경=해제, 다른 사진=선택 전환).
+   * 빈 슬롯의 파일 선택은 + 배지 DOM 버튼이 표면 위에 떠 있어 여기로 오지 않는다.
    */
   const handleSurfaceTap = (clientX: number, clientY: number) => {
     const p = toCanvas(clientX, clientY);
@@ -692,21 +708,10 @@ function SelectionControls({
         p.y <= pl.rect.y + pl.rect.height,
     );
     const state = useEditorStore.getState();
-    if (!hit || hit.slot === selected) {
-      setSelectedSlot(null); // 배경(고스트 포함) 또는 재탭 → 해제
-    } else if (state.photos[hit.slot]) {
+    if (hit && hit.slot !== selected && state.photos[hit.slot]) {
       setSelectedSlot(hit.slot); // 다른 사진 → 선택 전환
     } else {
-      // 빈 슬롯 → 파일 선택 (기존 동작), 앵커 = 해당 슬롯의 + 배지
-      onReplace(
-        hit.slot,
-        anchorAt(
-          groupRef.current,
-          hit.rect.x + hit.rect.width / 2,
-          hit.rect.y + hit.rect.height / 2,
-          stageScale,
-        ),
-      );
+      setSelectedSlot(null); // 배경(고스트 포함)·재탭·빈 슬롯 → 해제
     }
   };
 
@@ -790,15 +795,6 @@ function SelectionControls({
   const handleRemoveTap = () => {
     if (!fireOnce("remove")) return;
     removePhoto(selected);
-  };
-
-  /** 📷 — 사진 교체: 파일 메뉴가 📷 버튼에서 펼쳐지도록 버튼 위치를 앵커로 넘긴다 */
-  const handleReplaceTap = () => {
-    if (!fireOnce("replace")) return;
-    onReplace(
-      selected,
-      anchorAt(groupRef.current, cameraX, cameraY, stageScale),
-    );
   };
 
   const iconScale = px(15) / 24;
@@ -900,47 +896,7 @@ function SelectionControls({
           lineCap="round"
         />
       </Group>
-      {/* 📷 교체 (슬롯 아래) — 탭 완료 시점에 실행해야 iOS가 파일 선택창을 허용한다
-          (터치의 user activation은 pointerup/touchend에 부여, pointerdown 시점엔 없음) */}
-      <Group
-        name="replace-button"
-        x={cameraX}
-        y={cameraY}
-        onPointerDown={(e) => {
-          e.evt.preventDefault();
-          e.cancelBubble = true;
-        }}
-        onClick={handleReplaceTap}
-        onTap={handleReplaceTap}
-        onPointerClick={handleReplaceTap}
-        onMouseEnter={() => {
-          const c = groupRef.current?.getStage()?.container();
-          if (c) c.style.cursor = "pointer";
-        }}
-      >
-        <Circle radius={px(24)} fill="#000" opacity={0} />
-        <Circle
-          radius={px(18)}
-          fill="#ffffff"
-          shadowColor="rgba(0,0,0,0.25)"
-          shadowBlur={px(5)}
-          listening={false}
-        />
-        {CAMERA_PATHS.map((data) => (
-          <Path
-            key={data}
-            data={data}
-            x={-12 * iconScale}
-            y={-12 * iconScale}
-            scaleX={iconScale}
-            scaleY={iconScale}
-            stroke="#1c1c1e"
-            strokeWidth={2}
-            lineCap="round"
-            lineJoin="round"
-          />
-        ))}
-      </Group>
+      {/* 📷 교체 버튼은 DOM 오버레이(ReplaceButton) — iOS 파일 메뉴 앵커 때문 */}
       {/* ⟳ 궤도 회전 핸들 (상단 중앙) — 드래그 시작이므로 down 시점 유지, touch 폴백 병행 */}
       <Group
         name="rotate-handle"

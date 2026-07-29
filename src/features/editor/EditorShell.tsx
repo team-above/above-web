@@ -23,14 +23,6 @@ const RATIO_LABEL: Record<VariantId, string> = {
   story: "Story 9:16",
 };
 
-/** 파일 메뉴 앵커 — 탭한 슬롯의 화면(viewport) rect */
-export interface SlotAnchor {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export function EditorShell({ template }: { template: FrameTemplate }) {
   const router = useRouter();
   const variant = useEditorStore((s) => s.variant);
@@ -64,19 +56,14 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
     return () => clearTimeout(timer);
   }, [notice, setNotice]);
 
-  const handleSlotTap = (slotId: string, anchor?: SlotAnchor) => {
+  /**
+   * 파일 선택 열기 — 반드시 작은 DOM 버튼(+ 배지·📷)의 클릭에서만 호출할 것.
+   * iOS는 input이 숨겨져 있으면 파일 메뉴를 "활성화를 일으킨 요소"에 앵커링한다 —
+   * 캔버스 탭에서 호출하면 캔버스 크기의 프리뷰 판(블롭)이 그려진다 (스펙 06 변경 이력).
+   */
+  const handleSlotTap = (slotId: string) => {
     pendingSlotRef.current = slotId;
-    const input = fileInputRef.current;
-    if (!input) return;
-    // iOS는 파일 메뉴를 input 요소 rect에 앵커링한다 — 크기 없는 앵커면 원형 폴백 판이
-    // 그려지므로, 탭한 슬롯의 화면 rect에 input을 겹쳐 메뉴가 슬롯에서 펼쳐지게 한다
-    if (anchor) {
-      input.style.left = `${anchor.x}px`;
-      input.style.top = `${anchor.y}px`;
-      input.style.width = `${Math.max(anchor.width, 1)}px`;
-      input.style.height = `${Math.max(anchor.height, 1)}px`;
-    }
-    input.click();
+    fileInputRef.current?.click();
   };
 
   const handleFile = async (file: File | undefined) => {
@@ -233,15 +220,13 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
         exportRef={exportRef}
       />
 
-      {/* display:none이면 iOS Safari가 파일 메뉴 앵커를 못 잡아 원형 폴백 판을 그린다 —
-          시각적으로만 숨기고, 클릭 직전에 handleSlotTap이 탭한 슬롯 rect 위로 옮겨 앵커링한다 */}
+      {/* 숨김 input — 활성화는 항상 DOM 버튼(+ 배지·📷)에서 일어나므로 display:none이어도
+          iOS 파일 메뉴가 그 버튼에 작게 앵커된다 (/debug/picker 실기기 검증) */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        className="pointer-events-none fixed bottom-0 left-1/2 h-px w-px opacity-0"
-        tabIndex={-1}
-        aria-hidden
+        className="hidden"
         data-testid="photo-input"
         onChange={(e) => {
           void handleFile(e.target.files?.[0]);
