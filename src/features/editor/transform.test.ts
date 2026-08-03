@@ -191,6 +191,65 @@ describe("composeTransform / toFocal / toZoom", () => {
   });
 });
 
+describe("pinchTransform", () => {
+  it("중점 기준으로 확대와 회전이 동시에 적용된다", async () => {
+    const { pinchTransform } = await import("./transform");
+    const start = initialTransform(photo, rect); // scale 1, 무회전, 중앙
+    const mid = { x: rect.width / 2, y: rect.height / 2 }; // 슬롯 중앙
+    const next = pinchTransform(start, 2, 30 * DEG, mid, photo, rect);
+    expect(next.scale).toBeCloseTo(2);
+    expect(next.rotation).toBeCloseTo(30 * DEG);
+    // 중앙을 잡고 돌리면 오프셋은 그대로 중앙
+    expect(next.x).toBeCloseTo(0);
+    expect(next.y).toBeCloseTo(0);
+  });
+
+  it("중점이 중앙이 아니면 그 지점이 제자리에 남도록 오프셋이 따라간다", async () => {
+    const { pinchTransform } = await import("./transform");
+    const start = initialTransform(photo, rect);
+    const focus = { x: 0, y: rect.height / 2 }; // 슬롯 왼쪽 가장자리
+    const next = pinchTransform(start, 2, 0, focus, photo, rect);
+    // t' = F + k(t − F), t=0 → t' = F(1−k) = (−100)(1−2) = +100 (클램프 한계와 동일)
+    expect(next.x).toBeCloseTo(100);
+    expect(next.scale).toBeCloseTo(2);
+  });
+
+  it("90° 스냅이 걸리면 오프셋 보정도 스냅된 각도차를 따른다", async () => {
+    const { pinchTransform } = await import("./transform");
+    const start = initialTransform(photo, rect);
+    const mid = { x: rect.width / 2, y: rect.height / 2 };
+    const next = pinchTransform(start, 1, 2 * DEG, mid, photo, rect);
+    expect(next.rotation).toBe(0); // ±3° 안 → 스냅되어 회전 없음
+    expect(next.scale).toBeCloseTo(1);
+  });
+
+  it("각도는 증분이 아니라 절대값이다 — 제스처 누적 각도를 그대로 넘긴다", async () => {
+    const { pinchTransform } = await import("./transform");
+    const mid = { x: rect.width / 2, y: rect.height / 2 };
+    const at45 = pinchTransform(
+      initialTransform(photo, rect),
+      1,
+      45 * DEG,
+      mid,
+      photo,
+      rect,
+    );
+    // 이미 45°인 상태에서 50°를 넘기면 결과는 50° (45+50=95°가 아니다)
+    const next = pinchTransform(at45, 1, 50 * DEG, mid, photo, rect);
+    expect(next.rotation).toBeCloseTo(50 * DEG);
+  });
+
+  it("회전으로 배율이 부족해지면 자동으로 키운다 (빈틈 방지)", async () => {
+    const { pinchTransform } = await import("./transform");
+    const start = initialTransform(photo, rect);
+    const mid = { x: rect.width / 2, y: rect.height / 2 };
+    // 축소(0.5배)를 시도해도 45°에 필요한 최소 배율까지는 올라간다
+    const next = pinchTransform(start, 0.5, 45 * DEG, mid, photo, rect);
+    expect(next.rotation).toBeCloseTo(45 * DEG);
+    expect(next.scale).toBeCloseTo(minScaleFor(photo, rect, 45 * DEG));
+  });
+});
+
 describe("decodeTargetSize", () => {
   it("최장변이 상한 이하면 원본 크기 유지", () => {
     expect(decodeTargetSize({ width: 2000, height: 1000 })).toEqual({

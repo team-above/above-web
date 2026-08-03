@@ -162,6 +162,50 @@ export function zoomAt(
   );
 }
 
+/**
+ * 두 손가락 제스처 — 확대/축소와 회전을 한 번에 적용한다 (기획 확정 2026-07-29).
+ * 두 손가락 사이 중점(focus, rect 좌상단 기준)이 사진 위 같은 지점에 머물도록
+ * 오프셋을 함께 회전·확대한다: t' = F + k·R(Δθ)·(t − F).
+ *
+ * `targetRotation`은 **증분이 아니라 절대 각도**다 — 제스처 중 누적한 원본 각도를 넘겨야
+ * 한다. 증분마다 스냅을 걸면 한 프레임당 회전량(수 도)이 스냅 임계(±3°)를 못 벗어나
+ * 매번 0으로 되돌아가 회전이 아예 안 걸린다.
+ * 오프셋 보정에는 스냅 후 실제 적용된 각도차를 쓴다.
+ */
+export function pinchTransform(
+  transform: PhotoTransform,
+  factor: number,
+  targetRotation: number,
+  focus: { x: number; y: number },
+  photo: Size,
+  rect: Size,
+): PhotoTransform {
+  const rotation = snapAngle(targetRotation);
+  const scale = Math.max(
+    transform.scale * factor,
+    minScaleFor(photo, rect, rotation),
+  );
+  const k = scale / transform.scale;
+  const applied = rotation - transform.rotation; // 스냅 후 실제 각도차
+  const cos = Math.cos(applied);
+  const sin = Math.sin(applied);
+  // focus를 슬롯 중심 기준으로 변환
+  const fx = focus.x - rect.width / 2;
+  const fy = focus.y - rect.height / 2;
+  const dx = transform.x - fx;
+  const dy = transform.y - fy;
+  return clampTransform(
+    {
+      x: fx + k * (dx * cos - dy * sin),
+      y: fy + k * (dx * sin + dy * cos),
+      scale,
+      rotation,
+    },
+    photo,
+    rect,
+  );
+}
+
 /** 90° 배수 근처(±SNAP_THRESHOLD)면 자석 스냅 */
 export function snapAngle(rotation: number): number {
   const quarter = Math.PI / 2;

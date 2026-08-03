@@ -9,7 +9,6 @@ import {
   Image as KonvaImage,
   Layer,
   Line,
-  Path,
   Rect,
   Stage,
 } from "react-konva";
@@ -19,6 +18,7 @@ import type { FrameTemplate, TemplatePlacement } from "@/templates/schema";
 import {
   clampTransform,
   composeTransform,
+  pinchTransform,
   rotateTo,
   toFocal,
   toZoom,
@@ -128,7 +128,6 @@ export default function EditorCanvas({
   exportRef,
 }: EditorCanvasProps) {
   const variant = useEditorStore((s) => s.variant);
-  const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
   const photos = useEditorStore((s) => s.photos);
   const selectedSlot = useEditorStore((s) => s.selectedSlot);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -256,26 +255,15 @@ export default function EditorCanvas({
               scaleX={fitted.scale}
               scaleY={fitted.scale}
               className="absolute inset-0"
-              // 프레임 밖 빈 영역(아무것도 맞지 않은 탭) → 선택 해제
-              onPointerDown={(e) => {
-                if (e.target === e.target.getStage()) setSelectedSlot(null);
-              }}
-              onTap={(e) => {
-                if (e.target === e.target.getStage()) setSelectedSlot(null);
-              }}
             >
               <Layer
                 x={origin.x}
                 y={origin.y}
                 clipFunc={roundedFrameClip(variantData.canvas, fitted.scale)}
               >
-                {/* base가 배경 탭을 받아 선택 해제 (슬롯이 위에서 우선한다).
-                    onTap은 iOS 실기기에서 pointer 이벤트가 유실될 때의 터치 폴백 */}
-                <KonvaImage
-                  image={base}
-                  onPointerDown={() => setSelectedSlot(null)}
-                  onTap={() => setSelectedSlot(null)}
-                />
+                {/* 프레임 배경 — 탭해도 선택은 유지된다 (해제는 사진 재탭 또는
+                    캔버스 바깥 페이지 여백 탭, 기획 확정 2026-07-29) */}
+                <KonvaImage image={base} />
                 {variantData.placements.map((placement) => (
                   <PlacementNode
                     key={placement.slot}
@@ -473,8 +461,20 @@ interface GestureSession {
   pointers: Map<number, { x: number; y: number }>;
   /** 누적 이동량 (캔버스 좌표 단위) — 탭/드래그 판별 */
   moved: number;
+  /** 직전 프레임의 두 손가락 거리·각도 — 배율·회전 증분 계산용 */
   lastDist: number | null;
+  lastAngle: number | null;
+  /** 두 손가락이 한 번이라도 닿았는가 — 탭(해제) 오인 방지 */
+  multiTouch?: boolean;
+  /** 제스처 동안 누적한 원본(스냅 전) 회전각 */
+  rawRotation?: number;
   cleanup: () => void;
+}
+
+/** 각도 차이를 -π..π로 정규화 — atan2 경계(±π)를 넘을 때 튀는 것 방지 */
+function normalizeAngle(delta: number): number {
+  const twoPi = Math.PI * 2;
+  return ((((delta + Math.PI) % twoPi) + twoPi) % twoPi) - Math.PI;
 }
 
 /**
@@ -661,7 +661,13 @@ function PlacementNode({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-    sessionRef.current = { pointers, moved: 0, lastDist: null, cleanup };
+    sessionRef.current = {
+      pointers,
+      moved: 0,
+      lastDist: null,
+      lastAngle: null,
+      cleanup,
+    };
   };
 
   return (
@@ -736,10 +742,6 @@ const CAMERA_PATHS = [
   "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z",
   "M12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
 ];
-const ROTATE_PATHS = [
-  "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8",
-  "M21 3v5h-5",
-];
 
 interface SelectionControlsProps {
   variantData: FrameTemplate["variants"]["post"];
@@ -761,15 +763,8 @@ function SelectionControls({
   const removePhoto = useEditorStore((s) => s.removePhoto);
   const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
   const groupRef = useRef<Konva.Group>(null);
-  const rotateSession = useRef<{ cleanup: () => void } | null>(null);
   const gestureSession = useRef<GestureSession | null>(null);
-  useEffect(
-    () => () => {
-      rotateSession.current?.cleanup();
-      gestureSession.current?.cleanup();
-    },
-    [],
-  );
+  useEffect(() => () => gestureSession.current?.cleanup(), []);
 
   // 한 번의 물리 탭이 브라우저에 따라 click/tap/pointerclick 여러 konva 이벤트로 합성되므로
   // (iOS는 pointer+touch+호환 mouse를 모두 발사) 짧은 창 안의 중복 실행을 막는다
@@ -800,65 +795,6 @@ function SelectionControls({
 
   const closeX = clampX(rect.x + rect.width);
   const closeY = clampY(rect.y);
-  // 📷(DOM ReplaceButton)는 슬롯 아래 바깥, ⟳는 위 바깥 — 대칭 배치
-  const rotateX = clampX(rect.x + rect.width / 2);
-  const rotateY = clampY(rect.y - px(32));
-
-  /**
-   * 궤도 회전 — 핸들을 잡고 슬롯 중심을 축으로 원을 그리듯 드래그.
-   * pointer/touch 양쪽에서 시작·추적한다 (iOS 실기기의 pointer 이벤트 유실 대비).
-   * 절대 각도 계산이라 두 경로가 겹쳐 와도 결과는 같다.
-   */
-  const startOrbit = (e: Konva.KonvaEventObject<PointerEvent | TouchEvent>) => {
-    e.evt.preventDefault();
-    e.cancelBubble = true;
-    if (rotateSession.current) return; // pointer·touch 중복 시작 방지
-    const stage = groupRef.current?.getStage();
-    const box = stage?.container().getBoundingClientRect();
-    if (!box) return;
-    const startPoint =
-      "touches" in e.evt ? e.evt.touches[0] : (e.evt as PointerEvent);
-    if (!startPoint) return;
-    const center = {
-      x: box.left + (rect.x + rect.width / 2) * stageScale,
-      y: box.top + (rect.y + rect.height / 2) * stageScale,
-    };
-    const startPointer = Math.atan2(
-      startPoint.clientY - center.y,
-      startPoint.clientX - center.x,
-    );
-    const startRotation = useEditorStore.getState().rotations[selected] ?? 0;
-    const applyAngle = (clientX: number, clientY: number) => {
-      const angle = Math.atan2(clientY - center.y, clientX - center.x);
-      applySlotUpdate(selected, rect, (current, size) =>
-        rotateTo(current, startRotation + (angle - startPointer), size, rect),
-      );
-    };
-    const onMove = (ev: PointerEvent) => applyAngle(ev.clientX, ev.clientY);
-    const onTouchMove = (ev: TouchEvent) => {
-      const t = ev.touches[0];
-      if (t) applyAngle(t.clientX, t.clientY);
-    };
-    const onUp = () => {
-      rotateSession.current?.cleanup();
-      rotateSession.current = null;
-    };
-    const cleanup = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("touchend", onUp);
-      window.removeEventListener("touchcancel", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    window.addEventListener("touchmove", onTouchMove);
-    window.addEventListener("touchend", onUp);
-    window.addEventListener("touchcancel", onUp);
-    rotateSession.current = { cleanup };
-  };
 
   /** 클라이언트 좌표 → 프레임(템플릿) 좌표 — 레이어 오프셋·스테이지 배율을 함께 역산 */
   const toCanvas = (clientX: number, clientY: number) => {
@@ -878,8 +814,10 @@ function SelectionControls({
   };
 
   /**
-   * 제스처 표면 탭 — 표면이 슬롯·배경을 덮으므로, 탭한 지점 아래의 슬롯 기준으로
-   * 기존 탭 의미를 재현한다 (재탭/배경=해제, 다른 사진=선택 전환).
+   * 제스처 표면 탭 — 표면이 슬롯·배경을 덮으므로, 탭한 지점 아래의 슬롯으로 의미를 정한다.
+   * **해제는 선택된 사진 구멍을 다시 탭했을 때만** (기획 확정 2026-07-29) — 확대·회전 도중
+   * 실수로 선택이 풀리지 않도록, 캔버스 안 프레임 배경 탭은 아무 것도 하지 않는다.
+   * (캔버스 바깥 페이지 여백 탭으로도 해제된다 — EditorShell이 처리)
    * 빈 슬롯의 파일 선택은 + 배지 DOM 버튼이 표면 위에 떠 있어 여기로 오지 않는다.
    */
   const handleSurfaceTap = (clientX: number, clientY: number) => {
@@ -891,29 +829,33 @@ function SelectionControls({
         p.y >= pl.rect.y &&
         p.y <= pl.rect.y + pl.rect.height,
     );
-    const state = useEditorStore.getState();
-    if (hit && hit.slot !== selected && state.photos[hit.slot]) {
+    if (!hit) return; // 프레임 배경 — 선택 유지
+    if (hit.slot === selected) {
+      setSelectedSlot(null); // 선택된 사진 재탭 → 해제
+    } else if (useEditorStore.getState().photos[hit.slot]) {
       setSelectedSlot(hit.slot); // 다른 사진 → 선택 전환
-    } else {
-      setSelectedSlot(null); // 배경(고스트 포함)·재탭·빈 슬롯 → 해제
     }
   };
 
   /**
    * 제스처 표면 세션 — 표면이 편집 영역 전체를 덮는다 (기획 요청 2026-07-29).
-   * **선택된 사진이 편집 영역 전체를 소유한다**: 핀치(배율)도 드래그(이동)도 사진 밖
-   * 어디서 시작해도 동작한다 — 구멍이 작은 프레임에서 조작이 어렵다는 피드백 반영.
-   * 움직임이 거의 없으면 탭으로 보고 해제/선택 전환을 처리한다.
+   * **선택된 사진이 편집 영역 전체를 소유한다**: 한 손가락 드래그(이동)도, 두 손가락
+   * 제스처(확대/축소 + 회전 동시)도 사진 밖 어디서 시작해도 동작한다.
+   * 두 손가락이 한 번이라도 닿았거나(multiTouch) 취소된 제스처는 탭으로 보지 않는다 —
+   * 확대하다가 선택이 풀리던 문제의 원인.
    */
   const startGesture = (e: Konva.KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault();
     const point = { x: e.evt.clientX, y: e.evt.clientY };
     const existing = gestureSession.current;
     if (existing) {
-      // 두 번째 손가락 → 핀치 모드 진입 (드래그·탭 오인 금지)
+      // 두 번째 손가락 → 확대·회전 모드 진입 (드래그·탭 오인 금지).
+      // 회전은 제스처 시작 각도부터 누적해야 스냅(±3°)에 갇히지 않는다
       existing.pointers.set(e.evt.pointerId, point);
       existing.lastDist = null;
-      existing.moved = 99;
+      existing.lastAngle = null;
+      existing.multiTouch = true;
+      existing.rawRotation = useEditorStore.getState().rotations[selected] ?? 0;
       return;
     }
     const pointers = new Map([[e.evt.pointerId, point]]);
@@ -937,15 +879,22 @@ function SelectionControls({
           );
         }
       } else if (s.pointers.size === 2) {
+        // 두 손가락: 벌린 거리 = 배율, 두 점을 잇는 선의 각도 변화 = 회전 (동시 적용)
         const [a, b] = [...s.pointers.values()];
         const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        if (s.lastDist !== null && s.lastDist > 0) {
+        const angle = Math.atan2(b.y - a.y, b.x - a.x);
+        if (s.lastDist !== null && s.lastDist > 0 && s.lastAngle !== null) {
           const mid = toCanvas((a.x + b.x) / 2, (a.y + b.y) / 2);
           const factor = dist / s.lastDist;
+          // 누적 각도로 관리 — 증분마다 스냅하면 매번 0으로 되돌아간다
+          s.rawRotation =
+            (s.rawRotation ?? 0) + normalizeAngle(angle - s.lastAngle);
+          const target = s.rawRotation;
           applySlotUpdate(selected, rect, (current, size) =>
-            zoomAt(
+            pinchTransform(
               current,
               factor,
+              target,
               { x: mid.x - rect.x, y: mid.y - rect.y },
               size,
               rect,
@@ -953,6 +902,7 @@ function SelectionControls({
           );
         }
         s.lastDist = dist;
+        s.lastAngle = angle;
       }
     };
     const onUp = (ev: PointerEvent) => {
@@ -960,21 +910,37 @@ function SelectionControls({
       if (!s || !s.pointers.has(ev.pointerId)) return;
       s.pointers.delete(ev.pointerId);
       s.lastDist = null;
+      s.lastAngle = null;
       if (s.pointers.size > 0) return;
       s.cleanup();
       gestureSession.current = null;
       setCursor("");
-      if (s.moved < 6) handleSurfaceTap(ev.clientX, ev.clientY);
+      // 한 손가락으로 거의 움직이지 않은 경우만 탭 — 확대·회전 후에는 선택을 유지한다
+      if (s.moved < 6 && !s.multiTouch)
+        handleSurfaceTap(ev.clientX, ev.clientY);
+    };
+    const onCancel = () => {
+      const s = gestureSession.current;
+      if (!s) return;
+      s.cleanup(); // 취소된 제스처는 탭으로 해석하지 않는다
+      gestureSession.current = null;
+      setCursor("");
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("pointercancel", onCancel);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    gestureSession.current = { pointers, moved: 0, lastDist: null, cleanup };
+    window.addEventListener("pointercancel", onCancel);
+    gestureSession.current = {
+      pointers,
+      moved: 0,
+      lastDist: null,
+      lastAngle: null,
+      cleanup,
+    };
   };
 
   /** ✕ — 선택된 사진 삭제 (탭 완료 시점, 합성 이벤트 중복 방어) */
@@ -982,8 +948,6 @@ function SelectionControls({
     if (!fireOnce("remove")) return;
     removePhoto(selected);
   };
-
-  const iconScale = px(15) / 24;
 
   return (
     <Group ref={groupRef}>
@@ -1081,42 +1045,8 @@ function SelectionControls({
           lineCap="round"
         />
       </Group>
-      {/* 📷 교체 버튼은 DOM 오버레이(ReplaceButton) — iOS 파일 메뉴 앵커 때문 */}
-      {/* ⟳ 궤도 회전 핸들 (상단 중앙) — 드래그 시작이므로 down 시점 유지, touch 폴백 병행 */}
-      <Group
-        name="rotate-handle"
-        x={rotateX}
-        y={rotateY}
-        onPointerDown={startOrbit}
-        onTouchStart={startOrbit}
-        onMouseEnter={() => {
-          const c = groupRef.current?.getStage()?.container();
-          if (c) c.style.cursor = "grab";
-        }}
-      >
-        <Circle radius={px(24)} fill="#000" opacity={0} />
-        <Circle
-          radius={px(16)}
-          fill="#ffffff"
-          shadowColor="rgba(0,0,0,0.25)"
-          shadowBlur={px(5)}
-          listening={false}
-        />
-        {ROTATE_PATHS.map((data) => (
-          <Path
-            key={data}
-            data={data}
-            x={-12 * iconScale}
-            y={-12 * iconScale}
-            scaleX={iconScale}
-            scaleY={iconScale}
-            stroke="#1c1c1e"
-            strokeWidth={2.4}
-            lineCap="round"
-            lineJoin="round"
-          />
-        ))}
-      </Group>
+      {/* 📷 교체 버튼은 DOM 오버레이(ReplaceButton) — iOS 파일 메뉴 앵커 때문.
+          회전은 별도 핸들 없이 두 손가락 제스처가 담당한다 (기획 확정 2026-07-29) */}
     </Group>
   );
 }

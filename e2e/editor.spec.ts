@@ -28,6 +28,14 @@ function trackErrors(page: Page): string[] {
 async function frameMapper(page: Page) {
   const root = page.locator('[data-testid="editor-canvas"]');
   const canvas = root.locator("canvas").first();
+  // 비율 전환 직후엔 에셋을 다시 불러오느라 캔버스가 잠깐 사라진다 — 다시 그려질 때까지 대기
+  await expect
+    .poll(async () => {
+      const b = await canvas.boundingBox().catch(() => null);
+      const scale = Number(await root.getAttribute("data-frame-scale"));
+      return b && scale > 0 ? 1 : 0;
+    })
+    .toBe(1);
   const box = (await canvas.boundingBox())!;
   const [left, top, scale] = await Promise.all([
     root.getAttribute("data-frame-left"),
@@ -323,22 +331,21 @@ test("선택하면 고스트·테두리가 보이고, 배경 탭으로 해제된
     .toBeGreaterThan(40);
   expect((await ghostAt(page, outside)).r).toBeGreaterThan(120);
 
-  // 배경(슬롯 밖 남색 영역) 탭 → 선택 해제 → 고스트 사라짐
+  // 프레임 배경(슬롯 밖 남색 영역) 탭 → 선택 유지 (기획 확정 2026-07-29)
   const bg = frame.at(60, 60);
   await page.mouse.click(bg.x, bg.y);
+  await page.waitForTimeout(200);
+  expect((await ghostAt(page, outside)).a).toBeGreaterThan(40);
+
+  // 사진 재탭 → 해제, 다시 탭 → 선택 (토글)
+  await page.mouse.click(center.x, center.y);
   await expect
     .poll(async () => (await ghostAt(page, outside)).a)
     .toBeLessThan(10);
-
-  // 사진 재탭 → 다시 선택(고스트), 한 번 더 탭 → 해제 (토글)
   await page.mouse.click(center.x, center.y);
   await expect
     .poll(async () => (await ghostAt(page, outside)).a)
     .toBeGreaterThan(40);
-  await page.mouse.click(center.x, center.y);
-  await expect
-    .poll(async () => (await ghostAt(page, outside)).a)
-    .toBeLessThan(10);
 });
 
 /**
@@ -360,7 +367,6 @@ async function selectionButtons(page: Page, slotIndex = 0) {
       x: centerX,
       y: frame.at(0, rect.y + rect.height).y + 32,
     }),
-    rotate: clamp({ x: centerX, y: frame.at(0, rect.y).y - 32 }),
     slotCenterScreen: frame.at(
       rect.x + rect.width / 2,
       rect.y + rect.height / 2,
@@ -402,11 +408,61 @@ test("📷로 교체 파일 선택이 열리고, ✕는 사진을 삭제한다 (
   expect((await ghostAt(page, probe)).a).toBeLessThan(10); // 선택 UI도 사라짐
 });
 
-test("궤도 핸들 드래그로 회전한다 (90° 스냅)", async ({ page }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "desktop-chrome",
-    "마우스 궤도 드래그는 데스크톱에서 검증 (코드 경로는 동일)",
+/**
+ * 두 손가락 제스처 시뮬레이션 — 벌리면서(확대) 동시에 각도를 돌린다(회전).
+ * Playwright touchscreen은 단일 터치만 지원해 PointerEvent를 직접 발생시킨다.
+ */
+async function twoFingerGesture(
+  page: Page,
+  origin: { x: number; y: number },
+  options: { spread: number; turn: number; steps?: number },
+) {
+  await page.evaluate(
+    async ({ origin, options }) => {
+      const { spread, turn, steps = 18 } = options;
+      const el = document.elementFromPoint(origin.x, origin.y)!;
+      const opts = (id: number, cx: number, cy: number) => ({
+        pointerId: id,
+        pointerType: "touch",
+        isPrimary: id === 1,
+        clientX: cx,
+        clientY: cy,
+        bubbles: true,
+        cancelable: true,
+      });
+      const at = (radius: number, angle: number, sign: number) => ({
+        x: origin.x + sign * radius * Math.cos(angle),
+        y: origin.y + sign * radius * Math.sin(angle),
+      });
+      const r0 = 40;
+      let a = at(r0, 0, -1);
+      let b = at(r0, 0, 1);
+      el.dispatchEvent(new PointerEvent("pointerdown", opts(1, a.x, a.y)));
+      el.dispatchEvent(new PointerEvent("pointerdown", opts(2, b.x, b.y)));
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const radius = r0 * (1 + (spread - 1) * t);
+        const angle = turn * t;
+        a = at(radius, angle, -1);
+        b = at(radius, angle, 1);
+        window.dispatchEvent(
+          new PointerEvent("pointermove", opts(1, a.x, a.y)),
+        );
+        window.dispatchEvent(
+          new PointerEvent("pointermove", opts(2, b.x, b.y)),
+        );
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      window.dispatchEvent(new PointerEvent("pointerup", opts(1, a.x, a.y)));
+      window.dispatchEvent(new PointerEvent("pointerup", opts(2, b.x, b.y)));
+    },
+    { origin, options },
   );
+}
+
+test("두 손가락으로 확대와 회전이 동시에 된다 (기획 확정 2026-07-29)", async ({
+  page,
+}) => {
   await openEditor(page, "frame01");
   const center = await placementCenter(page, frame01, "post", "left");
   const chooserPromise = page.waitForEvent("filechooser");
@@ -415,25 +471,14 @@ test("궤도 핸들 드래그로 회전한다 (90° 스냅)", async ({ page }, t
     await chooserPromise
   ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+  const before = await ghostBBox(page);
 
-  const buttons = await selectionButtons(page);
-  const c = buttons.slotCenterScreen;
-  const radius = Math.hypot(buttons.rotate.x - c.x, buttons.rotate.y - c.y);
-  // 핸들(위쪽)에서 시작해 시계 방향으로 동쪽(+90°)까지 원을 그리며 드래그
-  await page.mouse.move(buttons.rotate.x, buttons.rotate.y);
-  await page.mouse.down();
-  for (let i = 1; i <= 8; i++) {
-    const theta = -Math.PI / 2 + (i / 8) * (Math.PI / 2);
-    await page.mouse.move(
-      c.x + radius * Math.cos(theta),
-      c.y + radius * Math.sin(theta),
-    );
-  }
-  await page.mouse.up();
+  // 슬롯 중앙에서 벌리면서(1.6배) 시계 방향 90°까지 돌린다
+  await twoFingerGesture(page, center, { spread: 1.6, turn: Math.PI / 2 });
 
-  // +90° 회전: 사진 왼쪽(빨강)이 슬롯 위쪽으로 온다
   const { rect } = frame01.variants.post.placements[0];
   const frame = await frameMapper(page);
+  // 회전: +90° → 사진 왼쪽(빨강)이 슬롯 위쪽으로 온다
   const top = await pixelAt(
     page,
     frame.at(rect.x + rect.width / 2, rect.y + 20),
@@ -444,6 +489,15 @@ test("궤도 핸들 드래그로 회전한다 (90° 스냅)", async ({ page }, t
   );
   expect(top.r - top.b).toBeGreaterThan(100);
   expect(bottom.b - bottom.r).toBeGreaterThan(100);
+
+  // 확대: 같은 제스처로 사진(고스트)의 면적이 커졌다
+  // (회전이 섞이면 바운딩 박스 폭은 줄 수 있어 면적으로 판정한다)
+  const after = await ghostBBox(page);
+  expect(after.count).toBeGreaterThan(before.count * 1.3);
+
+  // 확대·회전 후에도 선택은 유지된다 (실기기 제보: 확대하면 선택이 풀림)
+  const outside = frame.at(rect.x - 40, rect.y + rect.height / 2);
+  expect((await ghostAt(page, outside)).a).toBeGreaterThan(40);
 });
 
 test("미선택 사진은 드래그해도 움직이지 않는다 (스펙 06)", async ({ page }) => {
@@ -456,10 +510,8 @@ test("미선택 사진은 드래그해도 움직이지 않는다 (스펙 06)", a
   ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
-  // 배경 탭으로 해제 후 드래그 시도
-  const frame = await frameMapper(page);
-  const bg = frame.at(60, 60);
-  await page.mouse.click(bg.x, bg.y);
+  // 사진 재탭으로 해제 후 드래그 시도
+  await page.mouse.click(center.x, center.y);
 
   const before = await pixelAt(page, center);
   await page.mouse.move(center.x, center.y);
@@ -638,7 +690,10 @@ test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 
     .toBeGreaterThan(100);
 });
 
-/** 고스트 레이어의 불투명 픽셀 가로 범위 (캔버스 백킹 좌표) */
+/**
+ * 고스트 레이어의 불투명 픽셀 가로 범위와 면적 (캔버스 백킹 좌표).
+ * 면적(count)은 회전에 불변이라 회전과 확대가 섞인 제스처의 확대 판정에 쓴다.
+ */
 async function ghostBBox(page: Page) {
   return page.evaluate(() => {
     const c = document.querySelectorAll(
@@ -647,15 +702,17 @@ async function ghostBBox(page: Page) {
     const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
     let minX = Number.POSITIVE_INFINITY;
     let maxX = -1;
+    let count = 0;
     for (let y = 0; y < c.height; y += 3) {
       for (let x = 0; x < c.width; x += 3) {
         if (d[(y * c.width + x) * 4 + 3] > 0) {
+          count++;
           if (x < minX) minX = x;
           if (x > maxX) maxX = x;
         }
       }
     }
-    return { minX, maxX, dpr: c.width / c.clientWidth };
+    return { minX, maxX, count, dpr: c.width / c.clientWidth };
   });
 }
 
@@ -709,28 +766,7 @@ test("사진 밖에서 핀치해도 배율이 조정된다 (기획 피드백 202
   const { rect } = frame01.variants.post.placements[0];
   const frame = await frameMapper(page);
   const pinch = frame.at(rect.x + rect.width / 2, rect.y + rect.height + 500);
-  await page.evaluate(async ({ x, y }) => {
-    const el = document.elementFromPoint(x, y)!;
-    const opts = (id: number, cx: number, cy: number) => ({
-      pointerId: id,
-      pointerType: "touch",
-      isPrimary: id === 1,
-      clientX: cx,
-      clientY: cy,
-      bubbles: true,
-      cancelable: true,
-    });
-    el.dispatchEvent(new PointerEvent("pointerdown", opts(1, x - 20, y)));
-    el.dispatchEvent(new PointerEvent("pointerdown", opts(2, x + 20, y)));
-    for (let i = 1; i <= 15; i++) {
-      const d = 20 + i * 6;
-      window.dispatchEvent(new PointerEvent("pointermove", opts(1, x - d, y)));
-      window.dispatchEvent(new PointerEvent("pointermove", opts(2, x + d, y)));
-      await new Promise((r) => setTimeout(r, 10));
-    }
-    window.dispatchEvent(new PointerEvent("pointerup", opts(1, x - 110, y)));
-    window.dispatchEvent(new PointerEvent("pointerup", opts(2, x + 110, y)));
-  }, pinch);
+  await twoFingerGesture(page, pinch, { spread: 2.5, turn: 0 });
 
   // 고스트(=사진 전체)가 실제로 커졌다
   await expect
