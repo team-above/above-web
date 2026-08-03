@@ -814,14 +814,21 @@ function SelectionControls({
   };
 
   /**
-   * 제스처 표면 탭 — 표면이 슬롯·배경을 덮으므로, 탭한 지점 아래의 슬롯으로 의미를 정한다.
-   * **해제는 선택된 사진 구멍을 다시 탭했을 때만** (기획 확정 2026-07-29) — 확대·회전 도중
-   * 실수로 선택이 풀리지 않도록, 캔버스 안 프레임 배경 탭은 아무 것도 하지 않는다.
-   * (캔버스 바깥 페이지 여백 탭으로도 해제된다 — EditorShell이 처리)
+   * 제스처 표면 탭 — 표면이 프레임 안팎을 모두 덮으므로, 탭한 지점으로 의미를 정한다
+   * (기획 확정 2026-07-29):
+   * - **프레임 바깥**(좌우·상하 여백) → 해제. 스테이지가 편집 영역 전체를 덮으므로
+   *   눈에는 빈 여백이어도 캔버스 안이다 — 여기서 직접 처리해야 한다.
+   * - 프레임 안 배경 → 아무 것도 하지 않음 (확대·회전 중 실수로 풀리지 않게)
+   * - 선택된 사진 재탭 → 해제 / 다른 사진 → 선택 전환
    * 빈 슬롯의 파일 선택은 + 배지 DOM 버튼이 표면 위에 떠 있어 여기로 오지 않는다.
    */
   const handleSurfaceTap = (clientX: number, clientY: number) => {
     const p = toCanvas(clientX, clientY);
+    const { width: canvasW, height: canvasH } = variantData.canvas;
+    if (p.x < 0 || p.y < 0 || p.x > canvasW || p.y > canvasH) {
+      setSelectedSlot(null); // 프레임 바깥 여백 → 해제
+      return;
+    }
     const hit = variantData.placements.find(
       (pl) =>
         p.x >= pl.rect.x &&
@@ -829,7 +836,7 @@ function SelectionControls({
         p.y >= pl.rect.y &&
         p.y <= pl.rect.y + pl.rect.height,
     );
-    if (!hit) return; // 프레임 배경 — 선택 유지
+    if (!hit) return; // 프레임 안 배경 — 선택 유지
     if (hit.slot === selected) {
       setSelectedSlot(null); // 선택된 사진 재탭 → 해제
     } else if (useEditorStore.getState().photos[hit.slot]) {

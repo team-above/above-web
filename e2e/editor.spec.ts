@@ -656,6 +656,37 @@ test("캔버스 바깥 페이지 영역 탭으로도 선택이 해제된다 (스
     .toBeLessThan(10);
 });
 
+test("프레임 좌우 여백 탭으로 선택이 해제된다 (기획 확정 2026-07-29)", async ({
+  page,
+}) => {
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  await attachPhoto(page, center); // 자동 선택
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  const { rect } = frame01.variants.post.placements[0];
+  const frame = await frameMapper(page);
+  const probe = frame.at(rect.x + 4, rect.y + rect.height / 2);
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeGreaterThan(40);
+
+  // 프레임 왼쪽 바깥(눈에는 빈 여백이지만 스테이지 캔버스 안쪽) 탭 → 해제
+  const frameLeft = Number(
+    await page
+      .locator('[data-testid="editor-canvas"]')
+      .getAttribute("data-frame-left"),
+  );
+  test.skip(
+    frameLeft < 6,
+    "이 뷰포트는 프레임이 폭을 꽉 채워 좌우 여백이 없다",
+  );
+  await page.mouse.click(frame.stage.x + frameLeft / 2, center.y);
+  await expect
+    .poll(async () => (await ghostAt(page, probe)).a)
+    .toBeLessThan(10);
+});
+
 test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 표면, 스펙 06)", async ({
   page,
 }) => {
