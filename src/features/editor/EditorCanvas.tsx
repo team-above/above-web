@@ -177,6 +177,32 @@ export default function EditorCanvas({
       })()
     : null;
 
+  /**
+   * 반대 비율 에셋 미리 받기 (사용자 확정 2026-07-29) — post↔story는 서로 다른
+   * base/overlay/마스크 파일을 쓴다. 전환 시점에 받기 시작하면 그동안 캔버스가 비어
+   * 깜빡인다 (실측: 느린 4G·캐시 없음에서 약 390ms). 현재 비율이 다 그려진 뒤에
+   * 백그라운드로 받아 두면 전환이 즉시 이뤄진다.
+   */
+  useEffect(() => {
+    if (!base || !overlay) return; // 보이는 비율이 먼저 — 대역폭 경쟁 방지
+    const other = template.variants[variant === "post" ? "story" : "post"];
+    const sources = [
+      other.assets.base,
+      other.assets.overlay,
+      ...other.placements.map((p) => p.mask),
+    ];
+    // 브라우저 HTTP 캐시에만 올려두면 되므로 결과는 쓰지 않는다
+    const preloaded = sources.map((src) => {
+      const image = new window.Image();
+      image.src = src;
+      return image;
+    });
+    return () => {
+      // 언마운트 시 남은 요청은 그대로 캐시에 들어가도 무해하다 — 참조만 끊는다
+      preloaded.length = 0;
+    };
+  }, [base, overlay, template, variant]);
+
   // 조작 중에는 해상도를 낮춰 프레임을 지키고, 손을 떼면 기기 해상도로 되돌린다
   const [interacting, setInteracting] = useState(false);
   const previewPixelRatio = Math.min(

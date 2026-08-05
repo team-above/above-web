@@ -656,6 +656,29 @@ test("캔버스 바깥 페이지 영역 탭으로도 선택이 해제된다 (스
     .toBeLessThan(10);
 });
 
+test("에디터 진입 시 반대 비율 에셋을 미리 받는다 (사용자 확정 2026-07-29)", async ({
+  page,
+}) => {
+  const requested = new Set<string>();
+  page.on("request", (r) => {
+    const url = r.url();
+    if (url.includes("/frames/")) requested.add(url.split("/frames/")[1]);
+  });
+  await openEditor(page, "frame01"); // post로 진입
+
+  // 보이는 post 에셋은 물론, 전환 대비로 story 에셋까지 받아둔다 (전환 시 깜빡임 방지)
+  await expect
+    .poll(
+      () =>
+        [
+          "frame01/story/base.webp",
+          "frame01/story/overlay.webp",
+          "frame01/story/mask-left.png",
+        ].filter((asset) => requested.has(asset)).length,
+    )
+    .toBe(3);
+});
+
 test("조작 중에만 미리보기 해상도를 낮춘다 (사용자 확정 2026-07-29)", async ({
   page,
 }, testInfo) => {
