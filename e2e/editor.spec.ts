@@ -656,6 +656,39 @@ test("캔버스 바깥 페이지 영역 탭으로도 선택이 해제된다 (스
     .toBeLessThan(10);
 });
 
+test("조작 중에만 미리보기 해상도를 낮춘다 (사용자 확정 2026-07-29)", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "mobile-chrome",
+    "DPR이 2보다 큰 프로젝트에서만 차이를 관측할 수 있다",
+  );
+  await openEditor(page, "frame01");
+  const center = await placementCenter(page, frame01, "post", "left");
+  await attachPhoto(page, center); // 자동 선택
+  await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
+
+  const canvasRatio = () =>
+    page.evaluate(() => {
+      const c = document.querySelector(
+        '[data-testid="editor-canvas"] canvas',
+      ) as HTMLCanvasElement;
+      return c.width / c.clientWidth;
+    });
+  const idle = await canvasRatio();
+  expect(idle).toBeGreaterThan(2); // 정지 상태는 기기 해상도 그대로
+
+  // 드래그 중에는 2로 낮아진다
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 40, center.y, { steps: 4 });
+  await expect.poll(canvasRatio).toBe(2);
+
+  // 손을 떼면 되돌아온다
+  await page.mouse.up();
+  await expect.poll(canvasRatio).toBe(idle);
+});
+
 test("프레임 좌우 여백 탭으로 선택이 해제된다 (기획 확정 2026-07-29)", async ({
   page,
 }) => {

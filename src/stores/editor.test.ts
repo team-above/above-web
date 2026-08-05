@@ -99,6 +99,37 @@ describe("editor 스토어", () => {
     expect(useEditorStore.getState().selectedSlot).toBe("right");
   });
 
+  it("upgradePhoto는 고해상도 비트맵으로 교체하고 초점을 같은 비율로 키운다", () => {
+    const close = vi.fn();
+    const store = useEditorStore.getState();
+    store.setPhoto("left", {
+      bitmap: { width: 100, height: 50, close } as unknown as ImageBitmap,
+      fileName: "a.jpg",
+    });
+    store.setFocal("left", { x: 10, y: -5 });
+    store.upgradePhoto("left", {
+      width: 300,
+      height: 150,
+    } as unknown as ImageBitmap);
+    const state = useEditorStore.getState();
+    expect(state.photos.left.bitmap.width).toBe(300);
+    expect(close).toHaveBeenCalled(); // 옛 비트맵 메모리 반환
+    expect(state.focals.left).toEqual({ x: 30, y: -15 }); // 3배 확대된 좌표계
+  });
+
+  it("upgradePhoto는 더 작거나 같은 비트맵이면 무시하고 즉시 반환한다", () => {
+    const store = useEditorStore.getState();
+    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
+    const close = vi.fn();
+    store.upgradePhoto("left", {
+      width: 100,
+      height: 100,
+      close,
+    } as unknown as ImageBitmap);
+    expect(useEditorStore.getState().photos.left.bitmap.width).toBe(100);
+    expect(close).toHaveBeenCalled(); // 쓰지 않을 비트맵은 바로 닫는다
+  });
+
   it("선택은 토글 가능하고 비율 전환 시 자동 해제된다 (스펙 06)", () => {
     const store = useEditorStore.getState();
     store.setSelectedSlot("left");

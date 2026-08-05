@@ -11,6 +11,10 @@ export interface SlotPhoto {
   /** 디코딩 완료된 비트맵 (EXIF 보정·다운샘플 적용 후) */
   bitmap: ImageBitmap;
   fileName: string;
+  /** 원본 파일 — 확대 시 더 높은 해상도로 다시 디코딩하는 데 쓴다 */
+  file?: File;
+  /** 원본(EXIF 보정 후) 크기 — 재디코딩 상한 판단용 */
+  sourceSize?: { width: number; height: number };
 }
 
 interface EditorState {
@@ -33,6 +37,8 @@ interface EditorState {
   setPhoto: (slotId: string, photo: SlotPhoto) => void;
   /** 슬롯의 사진을 삭제하고 빈 슬롯으로 되돌린다 (✕ 버튼, 스펙 06) */
   removePhoto: (slotId: string) => void;
+  /** 같은 사진을 더 높은 해상도 비트맵으로 교체한다 (확대 시 화질 회복) */
+  upgradePhoto: (slotId: string, bitmap: ImageBitmap) => void;
   setFocal: (slotId: string, focal: FocalPoint) => void;
   setRotation: (slotId: string, rotation: number) => void;
   setZoom: (slotId: string, zoom: number) => void;
@@ -100,6 +106,27 @@ export const useEditorStore = create<EditorState>((set) => ({
         zooms: omit(state.zooms, slotId),
         // 삭제된 슬롯이 선택 중이었으면 함께 해제
         selectedSlot: state.selectedSlot === slotId ? null : state.selectedSlot,
+      };
+    }),
+  upgradePhoto: (slotId, bitmap) =>
+    set((state) => {
+      const prev = state.photos[slotId];
+      if (!prev || bitmap.width <= prev.bitmap.width) {
+        bitmap.close?.(); // 필요 없어진 비트맵은 즉시 반환
+        return state;
+      }
+      // 초점은 사진 픽셀 단위라 해상도가 커진 만큼 함께 키워야 같은 지점을 가리킨다
+      const ratio = bitmap.width / prev.bitmap.width;
+      const focal = state.focals[slotId];
+      prev.bitmap.close?.();
+      return {
+        photos: { ...state.photos, [slotId]: { ...prev, bitmap } },
+        focals: focal
+          ? {
+              ...state.focals,
+              [slotId]: { x: focal.x * ratio, y: focal.y * ratio },
+            }
+          : state.focals,
       };
     }),
   setFocal: (slotId, focal) =>

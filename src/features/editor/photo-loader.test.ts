@@ -31,7 +31,13 @@ describe("loadPhoto", () => {
     vi.stubGlobal("createImageBitmap", spy);
     const file = new File(["x"], "photo.jpg", { type: "image/jpeg" });
     const result = await loadPhoto(file);
-    expect(result).toEqual({ bitmap: decoded, fileName: "photo.jpg" });
+    // 확대 시 재디코딩할 수 있게 원본 파일·크기를 함께 들고 있는다
+    expect(result).toEqual({
+      bitmap: decoded,
+      fileName: "photo.jpg",
+      file,
+      sourceSize: { width: 1600, height: 1200 },
+    });
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith(file, { imageOrientation: "from-image" });
   });

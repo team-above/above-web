@@ -2,7 +2,7 @@
 
 import KonvaLib from "konva";
 import type Konva from "konva";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Circle,
   Group,
@@ -29,17 +29,23 @@ import {
 import { useImageElement } from "./use-image";
 
 /**
- * 미리보기 캔버스 해상도 상한. DPR 3 기기에서 화면 전체 캔버스 3장을 3배 해상도로 다시
- * 칠하면 조작 중 프레임이 밀린다 (실측 p90 54ms → 상한 2에서 25ms, 32ms 초과 프레임 0).
+ * 미리보기 캔버스 해상도 — **조작 중에만 낮춘다** (사용자 확정 2026-07-29).
+ * DPR 3 기기에서 화면 크기 캔버스 3장을 3배로 다시 칠하면 조작 중 프레임이 밀리고
+ * (실측 p90 54ms → 상한 2에서 25ms), 반대로 항상 2로 고정하면 정지 화면이 흐려진다.
+ * 그래서 드래그·핀치·휠 중에는 2, 손을 떼면 기기 해상도(최대 3)로 되돌린다.
  * 내보내기는 `toCanvas()`가 pixelRatio 1(템플릿 원본 해상도)을 쓰므로 영향받지 않는다.
  */
-const MAX_PREVIEW_PIXEL_RATIO = 2;
+const MAX_IDLE_PIXEL_RATIO = 3;
+const MAX_INTERACTING_PIXEL_RATIO = 2;
+const devicePixelRatio = () =>
+  typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 if (typeof window !== "undefined") {
-  KonvaLib.pixelRatio = Math.min(
-    window.devicePixelRatio || 1,
-    MAX_PREVIEW_PIXEL_RATIO,
-  );
+  // 이후 새로 만들어지는 레이어 캔버스의 기본값 (비율 전환 등으로 재생성될 때)
+  KonvaLib.pixelRatio = Math.min(devicePixelRatio(), MAX_IDLE_PIXEL_RATIO);
 }
+
+/** 원본 재디코딩 상한 — 확대 시 화질 회복용, 메모리 폭주 방지 (스펙 03 성능 노트) */
+const MAX_SOURCE_WIDTH = 4096;
 
 /** 내보내기 함수 시그니처 — 메인 레이어를 캔버스 좌표계 네이티브 해상도로 래스터화 (스펙 04) */
 export type ExportFn = () => HTMLCanvasElement | null;
@@ -52,12 +58,14 @@ const SLOT_GROUP_NAME = "slot-group";
  * 기본값(devicePixelRatio)은 템플릿 원본(1080폭) 기준이라 큰 슬롯에서 프레임당 수백만
  * 픽셀을 새로 그리게 되어 드래그·핀치가 끊긴다. 내보내기 직전에만 원본 해상도로 다시 굽는다.
  */
-function previewCachePixelRatio(stageScale: number): number {
-  const dpr =
-    typeof window === "undefined"
-      ? 1
-      : Math.min(window.devicePixelRatio || 1, MAX_PREVIEW_PIXEL_RATIO);
-  return Math.min(Math.max(stageScale * dpr, 0.5), MAX_PREVIEW_PIXEL_RATIO);
+function previewCachePixelRatio(
+  stageScale: number,
+  previewPixelRatio: number,
+): number {
+  return Math.min(
+    Math.max(stageScale * previewPixelRatio, 0.5),
+    MAX_IDLE_PIXEL_RATIO,
+  );
 }
 
 interface EditorCanvasProps {
@@ -169,7 +177,72 @@ export default function EditorCanvas({
       })()
     : null;
 
-  const cachePixelRatio = fitted ? previewCachePixelRatio(fitted.scale) : 1;
+  // 조작 중에는 해상도를 낮춰 프레임을 지키고, 손을 떼면 기기 해상도로 되돌린다
+  const [interacting, setInteracting] = useState(false);
+  const previewPixelRatio = Math.min(
+    devicePixelRatio(),
+    interacting ? MAX_INTERACTING_PIXEL_RATIO : MAX_IDLE_PIXEL_RATIO,
+  );
+  const cachePixelRatio = fitted
+    ? previewCachePixelRatio(fitted.scale, previewPixelRatio)
+    : 1;
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    for (const layer of stage.getLayers()) {
+      layer.getCanvas().setPixelRatio(previewPixelRatio);
+    }
+    stage.batchDraw();
+  }, [previewPixelRatio, stageSize?.width, stageSize?.height, variantData]);
+
+  /**
+   * 확대해서 원본보다 더 큰 해상도가 필요해지면 원본 파일을 그 배율로 다시 디코딩한다
+   * (사용자 확정 2026-07-29). 첨부 시에는 2160px로 가볍게 들고 있다가, 조작이 끝난 뒤
+   * 필요한 만큼만 올린다 — 내보내기는 동기 경로를 유지해야 해서(iOS 공유 시트의 사용자
+   * 제스처 제약) 저장 시점이 아니라 편집이 끝난 시점에 미리 올려둔다.
+   */
+  const upgradeSourceResolution = useCallback(async () => {
+    for (const placement of variantData.placements) {
+      const state = useEditorStore.getState();
+      const photo = state.photos[placement.slot];
+      if (!photo?.file || !photo.sourceSize) continue;
+      const size = { width: photo.bitmap.width, height: photo.bitmap.height };
+      const stored = composeTransform(
+        state.focals[placement.slot] ?? null,
+        state.zooms[placement.slot] ?? 1,
+        state.rotations[placement.slot] ?? 0,
+        size,
+        placement.rect,
+      );
+      // 내보내기(템플릿 원본 좌표계)에서 이 사진이 차지할 픽셀 폭
+      const needed = size.width * stored.scale;
+      const target = Math.min(
+        Math.ceil(needed),
+        photo.sourceSize.width,
+        MAX_SOURCE_WIDTH,
+      );
+      if (target <= size.width * 1.05) continue; // 이미 충분
+      try {
+        const bitmap = await createImageBitmap(photo.file, {
+          imageOrientation: "from-image",
+          resizeWidth: target,
+          resizeHeight: Math.round(
+            (target * photo.sourceSize.height) / photo.sourceSize.width,
+          ),
+          resizeQuality: "high",
+        });
+        useEditorStore.getState().upgradePhoto(placement.slot, bitmap);
+      } catch {
+        // 재디코딩 실패는 화질만 낮출 뿐 편집을 막지 않는다 — 조용히 넘어간다
+      }
+    }
+  }, [variantData]);
+
+  useEffect(() => {
+    if (interacting) return;
+    void upgradeSourceResolution();
+  }, [interacting, upgradeSourceResolution]);
 
   // 내보내기: 스테이지를 잠시 1:1 프레임 크기로 되돌려 메인 레이어만 래스터화
   // (UI·선택 레이어 제외). 레이어 오프셋·라운드 클립을 걷어내고,
@@ -286,6 +359,7 @@ export default function EditorCanvas({
                 <SelectionControls
                   variantData={variantData}
                   stageScale={fitted.scale}
+                  onInteracting={setInteracting}
                   stageArea={{
                     x: -origin.x,
                     y: -origin.y,
@@ -748,13 +822,16 @@ interface SelectionControlsProps {
   stageScale: number;
   /** 스테이지 전체 영역 (프레임 좌표계 기준) — 제스처 표면·버튼 클램프 범위 */
   stageArea: { x: number; y: number; width: number; height: number };
+  /** 조작 중 여부 — 미리보기 해상도를 낮췄다가 되돌리는 신호 */
+  onInteracting: (active: boolean) => void;
 }
 
-/** 선택 테두리 + ✕(사진 삭제)·⟳(궤도 회전 핸들) 오버레이 — 📷는 DOM(ReplaceButton) (스펙 06) */
+/** 선택 테두리 + ✕(사진 삭제) 오버레이 — 📷는 DOM(ReplaceButton), 회전은 두 손가락 (스펙 06) */
 function SelectionControls({
   variantData,
   stageScale,
   stageArea,
+  onInteracting,
 }: SelectionControlsProps) {
   const selected = useEditorStore((s) => s.selectedSlot);
   const photo = useEditorStore((s) =>
@@ -764,7 +841,21 @@ function SelectionControls({
   const setSelectedSlot = useEditorStore((s) => s.setSelectedSlot);
   const groupRef = useRef<Konva.Group>(null);
   const gestureSession = useRef<GestureSession | null>(null);
-  useEffect(() => () => gestureSession.current?.cleanup(), []);
+  const wheelIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      gestureSession.current?.cleanup();
+      if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
+    },
+    [],
+  );
+
+  /** 휠은 시작·끝 이벤트가 없어 마지막 휠 이후 잠깐 기다렸다 조작 종료로 본다 */
+  const markWheeling = () => {
+    onInteracting(true);
+    if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
+    wheelIdleTimer.current = setTimeout(() => onInteracting(false), 250);
+  };
 
   // 한 번의 물리 탭이 브라우저에 따라 click/tap/pointerclick 여러 konva 이벤트로 합성되므로
   // (iOS는 pointer+touch+호환 mouse를 모두 발사) 짧은 창 안의 중복 실행을 막는다
@@ -867,6 +958,7 @@ function SelectionControls({
     }
     const pointers = new Map([[e.evt.pointerId, point]]);
     setCursor("grabbing");
+    onInteracting(true); // 조작 중 — 미리보기 해상도를 낮춘다
     const onMove = (ev: PointerEvent) => {
       const s = gestureSession.current;
       if (!s || !s.pointers.has(ev.pointerId)) return;
@@ -922,6 +1014,7 @@ function SelectionControls({
       s.cleanup();
       gestureSession.current = null;
       setCursor("");
+      onInteracting(false); // 조작 끝 — 해상도 복귀 + 필요하면 원본 재디코딩
       // 한 손가락으로 거의 움직이지 않은 경우만 탭 — 확대·회전 후에는 선택을 유지한다
       if (s.moved < 6 && !s.multiTouch)
         handleSurfaceTap(ev.clientX, ev.clientY);
@@ -932,6 +1025,7 @@ function SelectionControls({
       s.cleanup(); // 취소된 제스처는 탭으로 해석하지 않는다
       gestureSession.current = null;
       setCursor("");
+      onInteracting(false);
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", onMove);
@@ -971,6 +1065,7 @@ function SelectionControls({
         onPointerDown={startGesture}
         onWheel={(e) => {
           e.evt.preventDefault();
+          markWheeling(); // 휠도 조작 — 멈추면 해상도 복귀
           const delta =
             Math.abs(e.evt.deltaY) >= Math.abs(e.evt.deltaX)
               ? e.evt.deltaY
