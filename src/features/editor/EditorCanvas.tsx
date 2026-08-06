@@ -189,7 +189,7 @@ export default function EditorCanvas({
     const sources = [
       other.assets.base,
       other.assets.overlay,
-      ...other.placements.map((p) => p.mask),
+      ...other.placements.flatMap((p) => (p.mask ? [p.mask] : [])),
     ];
     // 브라우저 HTTP 캐시에만 올려두면 되므로 결과는 쓰지 않는다
     const preloaded = sources.map((src) => {
@@ -578,11 +578,11 @@ function normalizeAngle(delta: number): number {
 }
 
 /**
- * 사진 + 마스크(destination-in) 합성과 탭(선택)/드래그/핀치 제스처를 담당하는 슬롯 노드.
+ * 사진 배치와 탭(선택)/드래그/핀치 제스처를 담당하는 슬롯 노드.
  *
- * 마스크는 구멍 모양(별·낙서)뿐 아니라 **구멍 안의 글자·장식(frame04 요일 라벨 등)도**
- * 사진에서 파낸다 — overlay만으로는 그 부분이 반투명이라 사진이 비쳐 흐려진다.
- * 그래서 합성은 유지하되, 캐시 해상도를 화면 크기에 맞춰 조작 중 비용을 낮춘다.
+ * 마스크가 있는 비사각 슬롯만 destination-in 합성 + 그룹 캐시를 쓰고(별무리 등),
+ * **사각 슬롯(v2 기본)은 rect 클립만으로 그린다** — 캐시 재베이크가 없어 조작 비용이
+ * 훨씬 낮고, 내보내기도 벡터 원본 해상도로 바로 그려진다 (스펙 01·03).
  */
 function PlacementNode({
   placement,
@@ -590,6 +590,7 @@ function PlacementNode({
   cachePixelRatio,
 }: PlacementNodeProps) {
   const { rect } = placement;
+  const needsMask = Boolean(placement.mask);
   const photo = useEditorStore((s) => s.photos[placement.slot]);
   const focal = useEditorStore((s) => s.focals[placement.slot]);
   const rotation = useEditorStore((s) => s.rotations[placement.slot] ?? 0);
@@ -608,12 +609,13 @@ function PlacementNode({
     ? composeTransform(focal ?? null, zoom, rotation, photoSize, rect)
     : null;
 
-  // 마스크 합성(destination-in)은 그룹 캐시 안에서만 적용되어야 레이어 전체를 지우지 않는다
-  const ready = Boolean(photo && mask && stored);
+  // 마스크 합성(destination-in)은 그룹 캐시 안에서만 적용되어야 레이어 전체를 지우지 않는다.
+  // 마스크 없는 사각 슬롯은 캐시 없이 rect 클립으로 그린다
+  const ready = Boolean(photo && stored && (!needsMask || mask));
   useEffect(() => {
     const group = groupRef.current;
     if (!group) return;
-    if (ready) {
+    if (ready && needsMask) {
       group.cache({
         x: 0,
         y: 0,
@@ -630,6 +632,7 @@ function PlacementNode({
     };
   }, [
     ready,
+    needsMask,
     stored?.x,
     stored?.y,
     stored?.scale,
@@ -779,6 +782,11 @@ function PlacementNode({
       name={SLOT_GROUP_NAME}
       slotWidth={rect.width}
       slotHeight={rect.height}
+      // 사각 슬롯(마스크 없음)은 rect 클립으로 사진을 가둔다 — 캐시·합성 불필요
+      clipX={needsMask ? undefined : 0}
+      clipY={needsMask ? undefined : 0}
+      clipWidth={needsMask ? undefined : rect.width}
+      clipHeight={needsMask ? undefined : rect.height}
     >
       {/* 히트 영역 — 별무리처럼 마스크가 희소해도 rect 전체가 탭 대상 (스펙 03) */}
       <Rect
@@ -826,11 +834,13 @@ function PlacementNode({
             rotation={(stored.rotation * 180) / Math.PI}
             listening={false}
           />
-          <KonvaImage
-            image={mask!}
-            listening={false}
-            globalCompositeOperation="destination-in"
-          />
+          {needsMask && (
+            <KonvaImage
+              image={mask!}
+              listening={false}
+              globalCompositeOperation="destination-in"
+            />
+          )}
         </>
       )}
     </Group>

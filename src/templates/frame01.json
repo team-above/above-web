@@ -32,7 +32,6 @@
             "width": 206,
             "height": 276
           },
-          "mask": "/frames/frame01/post/mask-left.png",
           "fit": "cover"
         },
         {
@@ -43,7 +42,6 @@
             "width": 206,
             "height": 276
           },
-          "mask": "/frames/frame01/post/mask-right.png",
           "fit": "cover"
         }
       ]
@@ -76,7 +74,6 @@
             "width": 238,
             "height": 320
           },
-          "mask": "/frames/frame01/story/mask-left.png",
           "fit": "cover"
         },
         {
@@ -87,7 +84,6 @@
             "width": 238,
             "height": 320
           },
-          "mask": "/frames/frame01/story/mask-right.png",
           "fit": "cover"
         }
       ]

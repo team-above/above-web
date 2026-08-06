@@ -666,14 +666,35 @@ test("에디터 진입 시 반대 비율 에셋을 미리 받는다 (사용자 �
   });
   await openEditor(page, "frame01"); // post로 진입
 
-  // 보이는 post 에셋은 물론, 전환 대비로 story 에셋까지 받아둔다 (전환 시 깜빡임 방지)
+  // 보이는 post 에셋은 물론, 전환 대비로 story 에셋까지 받아둔다 (전환 시 깜빡임 방지).
+  // frame01은 v2 사각 슬롯이라 마스크 파일이 없다 (스펙 01)
+  await expect
+    .poll(
+      () =>
+        ["frame01/story/base.webp", "frame01/story/overlay.webp"].filter(
+          (asset) => requested.has(asset),
+        ).length,
+    )
+    .toBe(2);
+});
+
+test("마스크 있는 템플릿은 반대 비율 마스크도 미리 받는다", async ({
+  page,
+}) => {
+  const requested = new Set<string>();
+  page.on("request", (r) => {
+    const url = r.url();
+    if (url.includes("/frames/")) requested.add(url.split("/frames/")[1]);
+  });
+  await openEditor(page, "frame02"); // post로 진입 — frame02는 마스크 슬롯 보유
+
   await expect
     .poll(
       () =>
         [
-          "frame01/story/base.webp",
-          "frame01/story/overlay.webp",
-          "frame01/story/mask-left.png",
+          "frame02/story/base.webp",
+          "frame02/story/overlay.webp",
+          "frame02/story/mask-stars.png",
         ].filter((asset) => requested.has(asset)).length,
     )
     .toBe(3);

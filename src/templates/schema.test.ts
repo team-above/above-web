@@ -79,6 +79,16 @@ describe("validateTemplate", () => {
     expect(() => validateTemplate(t)).toThrow(/rect/);
   });
 
+  it("mask 없는 placement를 허용하고(사각 슬롯 rect 클립), 문자열 아닌 mask는 거부한다", () => {
+    const t = validTemplate();
+    delete (t.variants.post.placements[0] as Record<string, unknown>).mask;
+    expect(() => validateTemplate(t)).not.toThrow();
+    const bad = validTemplate();
+    // @ts-expect-error 검증 대상 오류 케이스
+    bad.variants.post.placements[0].mask = 123;
+    expect(() => validateTemplate(bad)).toThrow(/mask/);
+  });
+
   it("cover 외의 fit을 거부한다", () => {
     const t = validTemplate();
     t.variants.post.placements[0].fit = "contain";

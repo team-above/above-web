@@ -25,7 +25,8 @@ export interface TemplateSlot {
 export interface TemplatePlacement {
   slot: string;
   rect: Rect;
-  mask: string;
+  /** 비사각 슬롯 전용 — 없으면 렌더러가 rect 클립으로 처리한다 (스펙 01) */
+  mask?: string;
   fit: "cover";
 }
 
@@ -116,8 +117,8 @@ function validateVariant(
     }
     if (!isRect(placement.rect))
       fail(id, `${variantId} placement.rect 형식 오류`);
-    if (typeof placement.mask !== "string")
-      fail(id, `${variantId} placement.mask 경로 필요`);
+    if (placement.mask !== undefined && typeof placement.mask !== "string")
+      fail(id, `${variantId} placement.mask는 경로 문자열이어야 함`);
     if (placement.fit !== "cover")
       fail(id, `${variantId} placement.fit은 "cover"만 지원`);
   }

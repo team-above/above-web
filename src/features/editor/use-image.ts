@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-/** 같은 오리진 에셋 이미지를 로드한다 (base/overlay/mask) */
-export function useImageElement(src: string): HTMLImageElement | null {
+/** 같은 오리진 에셋 이미지를 로드한다 (base/overlay/mask). src가 없으면 로드하지 않는다 */
+export function useImageElement(
+  src: string | undefined,
+): HTMLImageElement | null {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   useEffect(() => {
+    if (!src) return;
     let cancelled = false;
     const el = new window.Image();
     el.onload = () => {
