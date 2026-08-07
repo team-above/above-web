@@ -117,6 +117,37 @@ describe("editor 스토어", () => {
     expect(state.focals.left).toEqual({ x: 30, y: -15 }); // 3배 확대된 좌표계
   });
 
+  it("fitPhoto는 저해상 비트맵으로 교체하고 초점을 같은 비율로 줄인다 (하향 대칭)", () => {
+    const close = vi.fn();
+    const store = useEditorStore.getState();
+    store.setPhoto("left", {
+      bitmap: { width: 2000, height: 1000, close } as unknown as ImageBitmap,
+      fileName: "a.jpg",
+    });
+    store.setFocal("left", { x: 100, y: -40 });
+    store.fitPhoto("left", {
+      width: 500,
+      height: 250,
+    } as unknown as ImageBitmap);
+    const state = useEditorStore.getState();
+    expect(state.photos.left.bitmap.width).toBe(500);
+    expect(close).toHaveBeenCalled(); // 옛 비트맵 메모리 반환
+    expect(state.focals.left).toEqual({ x: 25, y: -10 }); // 1/4로 줄어든 좌표계
+  });
+
+  it("fitPhoto는 더 크거나 같은 비트맵이면 무시하고 즉시 반환한다", () => {
+    const store = useEditorStore.getState();
+    store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" }); // width 100
+    const close = vi.fn();
+    store.fitPhoto("left", {
+      width: 100,
+      height: 100,
+      close,
+    } as unknown as ImageBitmap);
+    expect(useEditorStore.getState().photos.left.bitmap.width).toBe(100);
+    expect(close).toHaveBeenCalled(); // 쓰지 않을 비트맵은 바로 닫는다
+  });
+
   it("upgradePhoto는 더 작거나 같은 비트맵이면 무시하고 즉시 반환한다", () => {
     const store = useEditorStore.getState();
     store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });

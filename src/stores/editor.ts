@@ -39,6 +39,8 @@ interface EditorState {
   removePhoto: (slotId: string) => void;
   /** 같은 사진을 더 높은 해상도 비트맵으로 교체한다 (확대 시 화질 회복) */
   upgradePhoto: (slotId: string, bitmap: ImageBitmap) => void;
+  /** 슬롯 필요치보다 과대한 비트맵을 축소본으로 교체 — 에일리어싱·메모리 절감 (upgradePhoto의 하향 대칭) */
+  fitPhoto: (slotId: string, bitmap: ImageBitmap) => void;
   setFocal: (slotId: string, focal: FocalPoint) => void;
   setRotation: (slotId: string, rotation: number) => void;
   setZoom: (slotId: string, zoom: number) => void;
@@ -116,6 +118,27 @@ export const useEditorStore = create<EditorState>((set) => ({
         return state;
       }
       // 초점은 사진 픽셀 단위라 해상도가 커진 만큼 함께 키워야 같은 지점을 가리킨다
+      const ratio = bitmap.width / prev.bitmap.width;
+      const focal = state.focals[slotId];
+      prev.bitmap.close?.();
+      return {
+        photos: { ...state.photos, [slotId]: { ...prev, bitmap } },
+        focals: focal
+          ? {
+              ...state.focals,
+              [slotId]: { x: focal.x * ratio, y: focal.y * ratio },
+            }
+          : state.focals,
+      };
+    }),
+  fitPhoto: (slotId, bitmap) =>
+    set((state) => {
+      const prev = state.photos[slotId];
+      if (!prev || bitmap.width >= prev.bitmap.width) {
+        bitmap.close?.(); // 하향인데 더 크면 무의미 — 즉시 반환
+        return state;
+      }
+      // 초점은 사진 픽셀 단위라 해상도가 줄어든 만큼 함께 줄여야 같은 지점을 가리킨다
       const ratio = bitmap.width / prev.bitmap.width;
       const focal = state.focals[slotId];
       prev.bitmap.close?.();

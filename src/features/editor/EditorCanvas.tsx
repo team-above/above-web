@@ -26,6 +26,7 @@ import {
   type PhotoTransform,
   type Size,
 } from "./transform";
+import { downscaleBitmap } from "./photo-loader";
 import { useImageElement } from "./use-image";
 
 /**
@@ -46,6 +47,15 @@ if (typeof window !== "undefined") {
 
 /** 원본 재디코딩 상한 — 확대 시 화질 회복용, 메모리 폭주 방지 (스펙 03 성능 노트) */
 const MAX_SOURCE_WIDTH = 4096;
+/**
+ * 하향 목표 = 필요 폭 × 1 (상향과 같은 "정확 공급" 철학) — 내보내기가 리샘플링 없는 1:1
+ * 블릿이 되어 에일리어싱이 원천 제거된다. 축소는 전부 createImageBitmap의 고품질
+ * 리샘플러가 담당. 모바일 미리보기 백킹(≈1.0×)도 그대로 커버한다 (실측 2026-08-07:
+ * 한 방 7~9배 축소 에너지 109 → ×2 공급 89 → ×1 공급이 이상적 축소본과 동급)
+ */
+const FIT_HEADROOM = 1;
+/** 하향 트리거 = 목표의 1.5배 초과일 때만 — 상향(1.05)과 함께 재디코드 핑퐁 방지 밴드 형성 */
+const FIT_HYSTERESIS = 1.5;
 
 /** 내보내기 함수 시그니처 — 메인 레이어를 캔버스 좌표계 네이티브 해상도로 래스터화 (스펙 04) */
 export type ExportFn = () => HTMLCanvasElement | null;
@@ -228,7 +238,11 @@ export default function EditorCanvas({
    * 필요한 만큼만 올린다 — 내보내기는 동기 경로를 유지해야 해서(iOS 공유 시트의 사용자
    * 제스처 제약) 저장 시점이 아니라 편집이 끝난 시점에 미리 올려둔다.
    */
-  const upgradeSourceResolution = useCallback(async () => {
+  // 사진 해상도 관리 (양방향, 스펙 03 화질 노트):
+  // 부족하면 원본에서 키우고(상향, 목표 1.0×), 과대하면 고품질 리사이저로 줄인다(하향, 목표 2×).
+  // 하향이 없으면 작은 슬롯(Weekly Dump 232px)에서 7~9배 단일 패스 축소가 일어나
+  // 고주파 사진이 에일리어싱으로 깨진다 (2026-08-07 실기기 제보 → 실측 원인 규명)
+  const manageSourceResolution = useCallback(async () => {
     for (const placement of variantData.placements) {
       const state = useEditorStore.getState();
       const photo = state.photos[placement.slot];
@@ -243,32 +257,65 @@ export default function EditorCanvas({
       );
       // 내보내기(템플릿 원본 좌표계)에서 이 사진이 차지할 픽셀 폭
       const needed = size.width * stored.scale;
-      const target = Math.min(
+      const upTarget = Math.min(
         Math.ceil(needed),
         photo.sourceSize.width,
         MAX_SOURCE_WIDTH,
       );
-      if (target <= size.width * 1.05) continue; // 이미 충분
+      const fitTarget = Math.min(
+        Math.ceil(needed * FIT_HEADROOM),
+        photo.sourceSize.width,
+        MAX_SOURCE_WIDTH,
+      );
+      const wantUp = upTarget > size.width * 1.05; // 부족 (5% 여유)
+      const wantFit = size.width > fitTarget * FIT_HYSTERESIS; // 과대 (히스테리시스)
+      if (!wantUp && !wantFit) continue; // 안정 구간
+      // 축소는 반드시 점진 반감(downscaleBitmap) — 단일 패스 리사이즈는 대배율에서
+      // 에일리어싱을 낸다 (createImageBitmap resizeQuality: "high"도 마찬가지, 실측 151 vs 33)
       try {
-        const bitmap = await createImageBitmap(photo.file, {
-          imageOrientation: "from-image",
-          resizeWidth: target,
-          resizeHeight: Math.round(
-            (target * photo.sourceSize.height) / photo.sourceSize.width,
-          ),
-          resizeQuality: "high",
-        });
-        useEditorStore.getState().upgradePhoto(placement.slot, bitmap);
+        if (wantFit) {
+          // 하향: 이미 들고 있는 비트맵에서 줄인다 (파일 재디코드 불필요)
+          const target = fitTarget;
+          const bitmap = await downscaleBitmap(
+            photo.bitmap,
+            target,
+            Math.round((target * size.height) / size.width),
+          );
+          useEditorStore.getState().fitPhoto(placement.slot, bitmap);
+        } else {
+          // 상향: 원본을 통째로 디코드한 뒤 목표까지 점진 축소
+          const target = upTarget;
+          const full = await createImageBitmap(photo.file, {
+            imageOrientation: "from-image",
+          });
+          const bitmap =
+            target >= full.width
+              ? full
+              : await downscaleBitmap(
+                  full,
+                  target,
+                  Math.round((target * full.height) / full.width),
+                );
+          if (bitmap !== full) full.close();
+          useEditorStore.getState().upgradePhoto(placement.slot, bitmap);
+        }
       } catch {
         // 재디코딩 실패는 화질만 낮출 뿐 편집을 막지 않는다 — 조용히 넘어간다
       }
     }
   }, [variantData]);
 
+  // 사진별 비트맵 폭 지문 — 첨부·교체·재디코드 시 관리 로직 재평가 트리거
+  // (재디코드 자체도 지문을 바꾸지만, 결과가 안정 구간에 들어가므로 1회로 수렴한다)
+  const photoWidths = useEditorStore((s) =>
+    Object.entries(s.photos)
+      .map(([slot, p]) => `${slot}:${p.bitmap.width}`)
+      .join(","),
+  );
   useEffect(() => {
     if (interacting) return;
-    void upgradeSourceResolution();
-  }, [interacting, upgradeSourceResolution]);
+    void manageSourceResolution();
+  }, [interacting, manageSourceResolution, photoWidths]);
 
   // 내보내기: 스테이지를 잠시 1:1 프레임 크기로 되돌려 메인 레이어만 래스터화
   // (UI·선택 레이어 제외). 레이어 오프셋·라운드 클립을 걷어내고,

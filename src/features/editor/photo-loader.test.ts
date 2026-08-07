@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadPhoto, PhotoLoadError } from "./photo-loader";
+import { downscaleSteps, loadPhoto, PhotoLoadError } from "./photo-loader";
 
 function fakeBitmap(width: number, height: number) {
   return { width, height, close: vi.fn() } as unknown as ImageBitmap;
@@ -59,5 +59,17 @@ describe("loadPhoto", () => {
       resizeQuality: "high",
     });
     expect(decoded.close).toHaveBeenCalled();
+  });
+});
+
+describe("downscaleSteps", () => {
+  it("목표의 2배 초과 구간만 반감 단계로 만든다 (마지막 ≤2배는 호출부 몫)", () => {
+    expect(downscaleSteps(4032, 310)).toEqual([2016, 1008, 504]); // 504→310 = 1.6배
+    expect(downscaleSteps(2160, 310)).toEqual([1080, 540]); // 540→310 = 1.7배
+  });
+
+  it("2배 이내면 반감 없이 빈 목록", () => {
+    expect(downscaleSteps(600, 310)).toEqual([]);
+    expect(downscaleSteps(310, 310)).toEqual([]);
   });
 });

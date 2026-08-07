@@ -6,6 +6,53 @@ import { decodeTargetSize } from "./transform";
 export class PhotoLoadError extends Error {}
 
 /**
+ * 점진 반감 계획 — 원본 폭에서 목표 폭까지 "2배씩" 줄이는 중간 단계 폭 목록.
+ * 브라우저의 단일 패스 리사이즈(drawImage·createImageBitmap resize)는 축소 배율이 2배를
+ * 크게 넘으면 원본 픽셀을 건너뛰며 샘플링해 에일리어싱이 생긴다(실측: 13배 축소에서
+ * 엣지 에너지 151 vs 점진 반감 33 vs 이상적 29 — 2026-08-07). 마지막 단계(≤2배)는 호출부가
+ * 목표 크기로 직접 그린다.
+ */
+export function downscaleSteps(
+  srcWidth: number,
+  targetWidth: number,
+): number[] {
+  const steps: number[] = [];
+  let width = srcWidth;
+  while (width / 2 > targetWidth) {
+    width = Math.round(width / 2);
+    steps.push(width);
+  }
+  return steps;
+}
+
+/** 비트맵을 점진 반감으로 목표 크기까지 고품질 축소한다. 원본은 닫지 않는다 */
+export async function downscaleBitmap(
+  source: ImageBitmap,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<ImageBitmap> {
+  let current: ImageBitmap | HTMLCanvasElement = source;
+  for (const width of downscaleSteps(source.width, targetWidth)) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = Math.round((width * source.height) / source.width);
+    const ctx = canvas.getContext("2d")!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(current, 0, 0, canvas.width, canvas.height);
+    current = canvas;
+  }
+  const final = document.createElement("canvas");
+  final.width = targetWidth;
+  final.height = targetHeight;
+  const ctx = final.getContext("2d")!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(current, 0, 0, targetWidth, targetHeight);
+  return createImageBitmap(final);
+}
+
+/**
  * 사용자 파일 → 슬롯 사진 비트맵.
  * EXIF 회전 보정 + 대형 사진 다운샘플(최장변 2160px) — 스펙 03 엣지 케이스.
  *
