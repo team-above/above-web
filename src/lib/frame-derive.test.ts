@@ -11,7 +11,6 @@ import {
   downscaleBy,
   eraseMask,
   extractSlotRegions,
-  fillRects,
   sortRegionsByReadingOrder,
   type RawImage,
   type SlotRegion,
@@ -257,14 +256,12 @@ describe("fillMaskToGray", () => {
   });
 });
 
-describe("diffRatio / fillRects", () => {
-  it("회색 rect를 채우고 불일치율을 잰다", () => {
+describe("diffRatio", () => {
+  it("픽셀 불일치율을 잰다", () => {
     const a = makeImage(["kk", "kk"], PALETTE);
-    const gray = fillRects(a, [{ x: 0, y: 0, width: 2, height: 1 }]);
-    expect(gray.data[0]).toBe(217); // 회색 채움
-    expect(gray.data[2 * 4]).toBe(33); // 아래 행은 유지
+    const b = makeImage(["RR", "kk"], PALETTE); // 위 행만 다름
     expect(diffRatio(a, a)).toBe(0);
-    expect(diffRatio(a, gray)).toBe(0.5); // 위 행 2/4 픽셀 불일치
+    expect(diffRatio(a, b)).toBe(0.5); // 위 행 2/4 픽셀 불일치
   });
 
   it("크기가 다르면 전체 불일치(1)로 본다", () => {

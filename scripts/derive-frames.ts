@@ -142,7 +142,6 @@ const FRAME_CONFIGS: FrameConfig[] = [
     // layer02(네온 클로버 오버레이)가 채움으로 오인되므로 슬롯 레이어 명시
     slotLayer: 1,
   },
-  // 나머지 프레임: 한 프레임씩 확인하며 추가 (기존 v1 산출물은 그대로 유지)
 ];
 
 function readPng(filePath: string): RawImage {
@@ -392,7 +391,7 @@ async function derivePreview(config: FrameConfig): Promise<string> {
 }
 
 for (const config of FRAME_CONFIGS) {
-  // 해당 프레임 산출물만 재생성 — v1 이행기의 다른 프레임 산출물은 건드리지 않는다
+  // 해당 프레임 산출물만 재생성 (프레임 간 독립)
   rmSync(path.join(PUBLIC_DIR, config.id), { recursive: true, force: true });
   const template: FrameTemplate = {
     id: config.id,

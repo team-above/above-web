@@ -379,21 +379,3 @@ export function semiTransparentMask(img: RawImage): Uint8Array {
   }
   return mask;
 }
-
-/** 회색 자리표시로 채운 사각형을 그린 사본 — 자동 회귀 합성용 */
-export function fillRects(img: RawImage, rects: Rect[], gray = 217): RawImage {
-  const data = new Uint8Array(img.data);
-  for (const rect of rects) {
-    for (let y = rect.y; y < rect.y + rect.height; y++) {
-      for (let x = rect.x; x < rect.x + rect.width; x++) {
-        if (x < 0 || x >= img.width || y < 0 || y >= img.height) continue;
-        const o = (y * img.width + x) * 4;
-        data[o] = gray;
-        data[o + 1] = gray;
-        data[o + 2] = gray;
-        data[o + 3] = 255;
-      }
-    }
-  }
-  return { width: img.width, height: img.height, data };
-}

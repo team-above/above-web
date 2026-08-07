@@ -10,7 +10,7 @@ import {
 describe("exportFileName", () => {
   it("above-{frameId}-{variant}.png 형식이다", () => {
     expect(exportFileName("duo", "post")).toBe("above-duo-post.png");
-    expect(exportFileName("caption", "story")).toBe("above-caption-story.png");
+    expect(exportFileName("doodle", "story")).toBe("above-doodle-story.png");
   });
 });
 
