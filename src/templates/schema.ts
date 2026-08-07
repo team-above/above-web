@@ -25,7 +25,9 @@ export interface TemplateSlot {
 export interface TemplatePlacement {
   slot: string;
   rect: Rect;
-  /** 비사각 슬롯 전용 — 없으면 렌더러가 rect 클립으로 처리한다 (스펙 01) */
+  /** 둥근 사각 슬롯의 모서리 반지름(캔버스 px) — 클립·자리표시에 사용 (스펙 01) */
+  radius?: number;
+  /** 자유 형상 슬롯 전용 — 없으면 렌더러가 rect(+radius) 클립으로 처리한다 (스펙 01) */
   mask?: string;
   fit: "cover";
 }
@@ -119,6 +121,13 @@ function validateVariant(
       fail(id, `${variantId} placement.rect 형식 오류`);
     if (placement.mask !== undefined && typeof placement.mask !== "string")
       fail(id, `${variantId} placement.mask는 경로 문자열이어야 함`);
+    if (
+      placement.radius !== undefined &&
+      (typeof placement.radius !== "number" ||
+        !Number.isFinite(placement.radius) ||
+        placement.radius < 0)
+    )
+      fail(id, `${variantId} placement.radius는 0 이상 숫자여야 함`);
     if (placement.fit !== "cover")
       fail(id, `${variantId} placement.fit은 "cover"만 지원`);
   }

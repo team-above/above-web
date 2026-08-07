@@ -1,8 +1,8 @@
 {
-  "id": "frame04",
+  "id": "weeklydump",
   "name": "Weekly Dump",
   "order": 4,
-  "preview": "/frames/frame04/preview.webp",
+  "preview": "/frames/weeklydump/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame04/post/base.webp",
-        "overlay": "/frames/frame04/post/overlay.webp"
+        "base": "/frames/weeklydump/post/base.webp",
+        "overlay": "/frames/weeklydump/post/overlay.webp"
       },
       "slots": [
         {
@@ -52,7 +52,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/post/mask-mon.png",
+          "mask": "/frames/weeklydump/post/mask-mon.png",
           "fit": "cover"
         },
         {
@@ -63,7 +63,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/post/mask-tue.png",
+          "mask": "/frames/weeklydump/post/mask-tue.png",
           "fit": "cover"
         },
         {
@@ -74,7 +74,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/post/mask-wed.png",
+          "mask": "/frames/weeklydump/post/mask-wed.png",
           "fit": "cover"
         },
         {
@@ -85,7 +85,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/post/mask-thu.png",
+          "mask": "/frames/weeklydump/post/mask-thu.png",
           "fit": "cover"
         },
         {
@@ -96,7 +96,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/post/mask-fri.png",
+          "mask": "/frames/weeklydump/post/mask-fri.png",
           "fit": "cover"
         },
         {
@@ -107,7 +107,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/post/mask-sat.png",
+          "mask": "/frames/weeklydump/post/mask-sat.png",
           "fit": "cover"
         },
         {
@@ -118,7 +118,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/post/mask-sun.png",
+          "mask": "/frames/weeklydump/post/mask-sun.png",
           "fit": "cover"
         }
       ]
@@ -129,8 +129,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame04/story/base.webp",
-        "overlay": "/frames/frame04/story/overlay.webp"
+        "base": "/frames/weeklydump/story/base.webp",
+        "overlay": "/frames/weeklydump/story/overlay.webp"
       },
       "slots": [
         {
@@ -171,7 +171,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/story/mask-mon.png",
+          "mask": "/frames/weeklydump/story/mask-mon.png",
           "fit": "cover"
         },
         {
@@ -182,7 +182,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/story/mask-tue.png",
+          "mask": "/frames/weeklydump/story/mask-tue.png",
           "fit": "cover"
         },
         {
@@ -193,7 +193,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/story/mask-wed.png",
+          "mask": "/frames/weeklydump/story/mask-wed.png",
           "fit": "cover"
         },
         {
@@ -204,7 +204,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/story/mask-thu.png",
+          "mask": "/frames/weeklydump/story/mask-thu.png",
           "fit": "cover"
         },
         {
@@ -215,7 +215,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/story/mask-fri.png",
+          "mask": "/frames/weeklydump/story/mask-fri.png",
           "fit": "cover"
         },
         {
@@ -226,7 +226,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/story/mask-sat.png",
+          "mask": "/frames/weeklydump/story/mask-sat.png",
           "fit": "cover"
         },
         {
@@ -237,7 +237,7 @@
             "width": 232,
             "height": 233
           },
-          "mask": "/frames/frame04/story/mask-sun.png",
+          "mask": "/frames/weeklydump/story/mask-sun.png",
           "fit": "cover"
         }
       ]

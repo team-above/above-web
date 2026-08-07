@@ -5,6 +5,7 @@
  * 규약: docs/specs/01-template-schema.md — v2 폴더가 있는 프레임만 재생성한다.
  */
 import {
+  existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -18,12 +19,13 @@ import {
   buildFillMask,
   buildSlotMask,
   compositeOver,
+  detectCornerRadius,
   diffRatio,
   dilateMask,
   downscaleBy,
   eraseMask,
   extractSlotRegions,
-  fillRects,
+  fillMaskToGray,
   type RawImage,
   type SlotRegion,
 } from "../src/lib/frame-derive.ts";
@@ -53,11 +55,17 @@ interface FrameConfig {
   dir: string;
   /** 읽기 순서(위→아래, 왼→오른쪽)로 슬롯 id를 매핑한다 */
   slots: { id: string; label: string }[];
+  /**
+   * 슬롯 레이어 번호(NN, 1부터) 명시. 디자인 자체가 선명한 단색을 쓰는 프레임은
+   * 자동 탐지("채움 있는 레이어 1장")가 모호해진다 — Accent의 layer01 빨간 배경처럼
+   * 배경색이 채움으로 오인되는 경우 여기로 슬롯 레이어를 지정한다
+   */
+  slotLayer?: number;
 }
 
 const FRAME_CONFIGS: FrameConfig[] = [
   {
-    id: "frame01",
+    id: "duo",
     name: "Duo",
     order: 1,
     dir: "Duo",
@@ -66,7 +74,19 @@ const FRAME_CONFIGS: FrameConfig[] = [
       { id: "right", label: "오른쪽 사진" },
     ],
   },
-  // frame02~06: 디자이너 v2 에셋 수령 후 추가 (기존 v1 산출물은 그대로 유지)
+  {
+    id: "accent",
+    name: "Accent",
+    order: 3,
+    dir: "Accent",
+    slots: [
+      { id: "top", label: "위 사진" },
+      { id: "bottom", label: "아래 사진" },
+    ],
+    // layer01의 빨강(214,0,0)은 상단 배경색이지 슬롯 채움이 아니다 — layer02가 슬롯 레이어
+    slotLayer: 2,
+  },
+  // 나머지 프레임: 한 프레임씩 확인하며 추가 (기존 v1 산출물은 그대로 유지)
 ];
 
 function readPng(filePath: string): RawImage {
@@ -112,16 +132,18 @@ async function deriveVariant(
   variant: VariantId,
 ): Promise<TemplateVariant> {
   const layers = readLayers(config, variant);
-  const sampleGray = readPng(
-    path.join(
-      DESIGN_DIR,
-      config.dir,
-      `${config.dir}_${variant}_sample_gray.png`,
-    ),
+  // sample_gray는 QA 기준(자동 회귀)으로만 쓴다 — 없으면 회귀만 건너뛴다 (스펙 01)
+  const sampleGrayPath = path.join(
+    DESIGN_DIR,
+    config.dir,
+    `${config.dir}_${variant}_sample_gray.png`,
   );
+  const sampleGray = existsSync(sampleGrayPath)
+    ? readPng(sampleGrayPath)
+    : null;
 
   const { width, height } = layers[0];
-  for (const img of [...layers, sampleGray]) {
+  for (const img of sampleGray ? [...layers, sampleGray] : layers) {
     if (img.width !== width || img.height !== height) {
       throw new Error(
         `${config.id}/${variant}: 파일 크기 불일치 (${img.width}×${img.height} vs ${width}×${height})`,
@@ -135,41 +157,59 @@ async function deriveVariant(
     );
   }
 
-  // 슬롯 레이어 탐지 — 채움 영역이 나오는 레이어가 정확히 1장이어야 한다
-  const extracted = layers.map((layer) => extractSlotRegions(layer));
-  const slotLayerIndices = extracted
-    .map((regions, i) => (regions.length > 0 ? i : -1))
-    .filter((i) => i >= 0);
-  if (slotLayerIndices.length !== 1) {
-    throw new Error(
-      `${config.id}/${variant}: 슬롯 채움이 있는 레이어가 ${slotLayerIndices.length}장 (정확히 1장이어야 함)`,
-    );
+  // 슬롯 레이어 결정 — 명시(slotLayer)가 없으면 채움 영역이 나오는 레이어가 정확히 1장이어야 한다
+  let slotLayerIndex: number;
+  if (config.slotLayer !== undefined) {
+    slotLayerIndex = config.slotLayer - 1;
+    if (slotLayerIndex < 0 || slotLayerIndex >= layers.length) {
+      throw new Error(
+        `${config.id}/${variant}: slotLayer ${config.slotLayer}가 레이어 수(${layers.length}) 범위 밖`,
+      );
+    }
+  } else {
+    const withFills = layers
+      .map((layer, i) => (extractSlotRegions(layer).length > 0 ? i : -1))
+      .filter((i) => i >= 0);
+    if (withFills.length !== 1) {
+      throw new Error(
+        `${config.id}/${variant}: 슬롯 채움이 있는 레이어가 ${withFills.length}장 — 설정에 slotLayer 명시 필요`,
+      );
+    }
+    slotLayerIndex = withFills[0];
   }
-  const slotLayerIndex = slotLayerIndices[0];
   const slotLayer = layers[slotLayerIndex];
-  const regions = extracted[slotLayerIndex];
+  const regions = extractSlotRegions(slotLayer);
   if (regions.length !== config.slots.length) {
     throw new Error(
       `${config.id}/${variant}: 채움 색 ${regions.length}개 != 슬롯 ${config.slots.length}개`,
     );
   }
 
-  // 크롬 = 슬롯 레이어에서 채움을 파낸 것. AA 잡색 제거를 위해 2×배율 px 과팽창 —
-  // base(sample_gray)가 같은 크롬을 갖고 있어 더 파내도 안전하다 (스펙 01)
+  // 크롬 = 슬롯 레이어에서 채움을 파낸 것. AA 잡색 제거를 위해 배율 px(1080 기준 1px)만 팽창 —
+  // base가 이제 아래층(layer01)이라 과팽창하면 그 자리에 배경이 비쳐 테두리가 얇아진다 (스펙 01)
   const fillMask = buildFillMask(
     slotLayer,
     regions.map((r) => r.color),
   );
   const chrome = eraseMask(
     slotLayer,
-    dilateMask(fillMask, width, height, 2 * factor),
+    dilateMask(fillMask, width, height, factor),
   );
   // overlay = 크롬 + 슬롯 레이어 위층들 합성
   const overlayFull = layers
     .slice(slotLayerIndex + 1)
     .reduce((acc, layer) => compositeOver(acc, layer), chrome);
 
-  const base = downscaleBy(sampleGray, factor);
+  // base = 슬롯 레이어 아래층 합성 — 회색 자리표시는 굽지 않는다 (코드가 그린다, 스펙 01)
+  const emptyCanvas = (): RawImage => ({
+    width,
+    height,
+    data: new Uint8Array(width * height * 4),
+  });
+  const baseFull = layers
+    .slice(0, slotLayerIndex)
+    .reduce((acc, layer) => compositeOver(acc, layer), emptyCanvas());
+  const base = downscaleBy(baseFull, factor);
   const overlay = downscaleBy(overlayFull, factor);
 
   const outDir = path.join(PUBLIC_DIR, config.id, variant);
@@ -185,8 +225,17 @@ async function deriveVariant(
       width: Math.round(region.bbox.width / factor),
       height: Math.round(region.bbox.height / factor),
     };
-    // 사각 슬롯은 마스크 생략 — 렌더러가 rect 클립으로 처리 (스펙 01·03)
+    // 분류 사다리: 완전 사각 → 둥근 사각(radius) → 자유 형상(mask) (스펙 01·03)
     if (region.isRect) return { slot: slot.id, rect, fit: "cover" as const };
+    const radiusFull = detectCornerRadius(slotLayer, region.color, region);
+    if (radiusFull !== null) {
+      return {
+        slot: slot.id,
+        rect,
+        radius: Math.round(radiusFull / factor),
+        fit: "cover" as const,
+      };
+    }
     const mask = downscaleBy(
       buildSlotMask(
         slotLayer,
@@ -210,24 +259,29 @@ async function deriveVariant(
     };
   });
 
-  // 자동 회귀 (수용 기준 4): 런타임 z-순서 그대로 base + 회색 rect(사진 대역) + overlay를
-  // 합성하면 다시 sample_gray(=base)가 나와야 한다 — rect 오배치·overlay 크롬 어긋남을 잡는다
-  const rebuilt = compositeOver(
-    fillRects(
-      base,
-      placements.map((p) => p.rect),
-    ),
-    overlay,
-  );
-  const ratio = diffRatio(rebuilt, base);
-  if (ratio > MAX_DIFF_RATIO) {
-    throw new Error(
-      `${config.id}/${variant}: 합성 회귀 실패 — sample_gray 불일치율 ${(ratio * 100).toFixed(2)}% > ${MAX_DIFF_RATIO * 100}%`,
+  // 자동 회귀 (수용 기준 4): 런타임 z-순서 그대로 base + 회색 자리표시 + overlay를 합성하면
+  // 디자이너의 sample_gray가 나와야 한다 — 좌표 오배치·층 분해 오류를 빌드 시점에 잡는다.
+  // 회색은 채움 마스크 그대로 칠해(축소로 가장자리 소프트닝) 코드 자리표시를 재현한다
+  if (sampleGray) {
+    const grayImg = downscaleBy(
+      fillMaskToGray(fillMask, width, height),
+      factor,
+    );
+    const rebuilt = compositeOver(compositeOver(base, grayImg), overlay);
+    const ratio = diffRatio(rebuilt, downscaleBy(sampleGray, factor));
+    if (ratio > MAX_DIFF_RATIO) {
+      throw new Error(
+        `${config.id}/${variant}: 합성 회귀 실패 — sample_gray 불일치율 ${(ratio * 100).toFixed(2)}% > ${MAX_DIFF_RATIO * 100}%`,
+      );
+    }
+    console.log(
+      `${config.id}/${variant}: 합성 회귀 통과 (불일치율 ${(ratio * 100).toFixed(3)}%)`,
+    );
+  } else {
+    console.warn(
+      `${config.id}/${variant}: sample_gray 없음 — 합성 회귀 건너뜀 (디자이너에게 요청 권장)`,
     );
   }
-  console.log(
-    `${config.id}/${variant}: 합성 회귀 통과 (불일치율 ${(ratio * 100).toFixed(3)}%)`,
-  );
 
   const describe = (regions as SlotRegion[])
     .map(

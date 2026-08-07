@@ -6,9 +6,9 @@ const loadTemplate = (id: string) =>
   JSON.parse(
     readFileSync(path.join(__dirname, `../src/templates/${id}.json`), "utf8"),
   );
-const frame01 = loadTemplate("frame01");
-const frame02 = loadTemplate("frame02");
-const frame04 = loadTemplate("frame04");
+const duo = loadTemplate("duo");
+const punching = loadTemplate("punching");
+const weeklydump = loadTemplate("weeklydump");
 const FIXTURE = path.join(__dirname, "fixtures/photo-red.png");
 
 /** 콘솔 에러·페이지 에러 수집 — 각 테스트 끝에서 0건을 단언한다 (스펙 03 AC6) */
@@ -147,9 +147,9 @@ async function openEditor(page: Page, frameId: string) {
 
 test("슬롯 탭 → 사진 첨부 → cover로 채워진다", async ({ page }) => {
   const errors = trackErrors(page);
-  await openEditor(page, "frame01");
+  await openEditor(page, "duo");
 
-  const center = await placementCenter(page, frame01, "post", "left");
+  const center = await placementCenter(page, duo, "post", "left");
   const before = await pixelAt(page, center);
   expect(before.r - before.g).toBeLessThan(60); // 자리표시(무채색) 상태 — 아직 빨강 아님
 
@@ -163,13 +163,13 @@ test("슬롯 탭 → 사진 첨부 → cover로 채워진다", async ({ page }) 
   expect(errors).toEqual([]);
 });
 
-test("frame05: 낙서 장식이 사진 위에 남는다 (층 순서)", async ({ page }) => {
+test("doodle: 낙서 장식이 사진 위에 남는다 (층 순서)", async ({ page }) => {
   const errors = trackErrors(page);
-  await openEditor(page, "frame05");
-  const frame05 = loadTemplate("frame05");
-  await attachPhoto(page, await placementCenter(page, frame05, "post", "main"));
+  await openEditor(page, "doodle");
+  const doodle = loadTemplate("doodle");
+  await attachPhoto(page, await placementCenter(page, doodle, "post", "main"));
 
-  const slotRect = frame05.variants.post.placements[0].rect;
+  const slotRect = doodle.variants.post.placements[0].rect;
   await expect
     .poll(async () => (await countSlotColors(page, slotRect)).red)
     .toBeGreaterThan(1000); // 사진이 슬롯을 채움
@@ -177,12 +177,17 @@ test("frame05: 낙서 장식이 사진 위에 남는다 (층 순서)", async ({ 
   expect(errors).toEqual([]);
 });
 
-test("frame02: 파란 별 장식이 사진 위에 남는다 (층 순서)", async ({ page }) => {
+test("punching: 파란 별 장식이 사진 위에 남는다 (층 순서)", async ({
+  page,
+}) => {
   const errors = trackErrors(page);
-  await openEditor(page, "frame02");
-  await attachPhoto(page, await placementCenter(page, frame02, "post", "main"));
+  await openEditor(page, "punching");
+  await attachPhoto(
+    page,
+    await placementCenter(page, punching, "post", "main"),
+  );
 
-  const mainRect = frame02.variants.post.placements.find(
+  const mainRect = punching.variants.post.placements.find(
     (p: { slot: string }) => p.slot === "main",
   ).rect;
   await expect
@@ -192,12 +197,15 @@ test("frame02: 파란 별 장식이 사진 위에 남는다 (층 순서)", async
   expect(errors).toEqual([]);
 });
 
-test("frame04: 요일 라벨이 사진 위에 남는다 (층 순서)", async ({ page }) => {
+test("weeklydump: 요일 라벨이 사진 위에 남는다 (층 순서)", async ({ page }) => {
   const errors = trackErrors(page);
-  await openEditor(page, "frame04");
-  await attachPhoto(page, await placementCenter(page, frame04, "post", "mon"));
+  await openEditor(page, "weeklydump");
+  await attachPhoto(
+    page,
+    await placementCenter(page, weeklydump, "post", "mon"),
+  );
 
-  const monRect = frame04.variants.post.placements.find(
+  const monRect = weeklydump.variants.post.placements.find(
     (p: { slot: string }) => p.slot === "mon",
   ).rect;
   await expect
@@ -213,8 +221,8 @@ test("드래그·줌을 끝까지 밀어도 슬롯에 빈틈이 생기지 않는
   page,
 }) => {
   const errors = trackErrors(page);
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   await attachPhoto(page, center);
   await expect
     .poll(async () => {
@@ -234,7 +242,7 @@ test("드래그·줌을 끝까지 밀어도 슬롯에 빈틈이 생기지 않는
 
   // 슬롯 왼쪽 가장자리 안쪽 픽셀이 여전히 빨강 (빈틈 = 회색 자리표시 노출이면 실패)
   const frame = await frameMapper(page);
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const edge = await pixelAt(
     page,
     frame.at(rect.x + 4, rect.y + rect.height / 2),
@@ -244,8 +252,8 @@ test("드래그·줌을 끝까지 밀어도 슬롯에 빈틈이 생기지 않는
 });
 
 test("드래그로 사진이 실제로 이동한다 (누적 이동)", async ({ page }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   // 가로로 긴 2색(좌 빨강/우 파랑) 사진 → cover 상태에서도 좌우 이동 범위가 넓다
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
@@ -303,15 +311,15 @@ async function ghostAt(page: Page, point: { x: number; y: number }) {
 test("선택하면 고스트·테두리가 보이고, 배경 탭으로 해제된다 (스펙 06)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
   await (
     await chooserPromise
   ).setFiles(path.join(__dirname, "fixtures/photo-redblue.png"));
   // 슬롯 중앙은 픽스처의 빨강/파랑 경계라 리샘플링에 섞인다 — 경계에서 떨어진 지점으로 판정
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const insideRed = frame.at(
     rect.x + rect.width * 0.2,
@@ -355,7 +363,7 @@ test("선택하면 고스트·테두리가 보이고, 배경 탭으로 해제된
 async function selectionButtons(page: Page, slotIndex = 0) {
   const frame = await frameMapper(page);
   const stage = frame.stage;
-  const rect = frame01.variants.post.placements[slotIndex].rect;
+  const rect = duo.variants.post.placements[slotIndex].rect;
   const clamp = (p: { x: number; y: number }) => ({
     x: Math.min(Math.max(p.x, stage.x + 22), stage.x + stage.width - 22),
     y: Math.min(Math.max(p.y, stage.y + 22), stage.y + stage.height - 22),
@@ -377,8 +385,8 @@ async function selectionButtons(page: Page, slotIndex = 0) {
 test("📷로 교체 파일 선택이 열리고, ✕는 사진을 삭제한다 (스펙 06)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   await attachPhoto(page, center); // 자동 선택
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
@@ -389,7 +397,7 @@ test("📷로 교체 파일 선택이 열리고, ✕는 사진을 삭제한다 (
   const chooser = await chooserPromise;
   await chooser.setFiles(FIXTURE); // 교체 (자동 선택 유지)
 
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const probe = frame.at(rect.x + 4, rect.y + rect.height / 2);
   await expect
@@ -463,8 +471,8 @@ async function twoFingerGesture(
 test("두 손가락으로 확대와 회전이 동시에 된다 (기획 확정 2026-07-29)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
   await (
@@ -476,7 +484,7 @@ test("두 손가락으로 확대와 회전이 동시에 된다 (기획 확정 20
   // 슬롯 중앙에서 벌리면서(1.6배) 시계 방향 90°까지 돌린다
   await twoFingerGesture(page, center, { spread: 1.6, turn: Math.PI / 2 });
 
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   // 회전: +90° → 사진 왼쪽(빨강)이 슬롯 위쪽으로 온다
   const top = await pixelAt(
@@ -501,8 +509,8 @@ test("두 손가락으로 확대와 회전이 동시에 된다 (기획 확정 20
 });
 
 test("미선택 사진은 드래그해도 움직이지 않는다 (스펙 06)", async ({ page }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
   await (
@@ -529,7 +537,7 @@ test("클릭 가능한 요소에 pointer 커서가 보인다", async ({ page }, 
     testInfo.project.name !== "desktop-chrome",
     "커서는 데스크톱(호버) 전용 검증",
   );
-  await openEditor(page, "frame01");
+  await openEditor(page, "duo");
   // 버튼류: Tailwind v4 preflight 복원 확인
   const toggle = page.getByRole("button", { name: "Story 9:16" });
   expect(await toggle.evaluate((el) => getComputedStyle(el).cursor)).toBe(
@@ -543,7 +551,7 @@ test("클릭 가능한 요소에 pointer 커서가 보인다", async ({ page }, 
   ).not.toBe("pointer");
 
   // 빈 슬롯의 + 배지(DOM 버튼) → pointer
-  const center = await placementCenter(page, frame01, "post", "left");
+  const center = await placementCenter(page, duo, "post", "left");
   expect(
     await page
       .locator('[data-testid="attach-left"]')
@@ -568,35 +576,35 @@ test("클릭 가능한 요소에 pointer 커서가 보인다", async ({ page }, 
 });
 
 test("홈으로 나갔다 다시 들어오면 편집 상태가 초기화된다", async ({ page }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   await attachPhoto(page, center);
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
   await page.getByRole("link", { name: /Home/ }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.locator("main ul li a").first().click();
-  await expect(page).toHaveURL(/\/editor\/frame01$/);
+  await expect(page).toHaveURL(/\/editor\/duo$/);
 
   // 초기화 확인: 다운로드 비활성 + 슬롯은 자리표시(무채색)로 복귀
   await expect(page.getByRole("button", { name: "다운로드" })).toBeDisabled();
   const p = await pixelAt(
     page,
-    await placementCenter(page, frame01, "post", "left"),
+    await placementCenter(page, duo, "post", "left"),
   );
   expect(p.r - p.g).toBeLessThan(60);
 });
 
 test("비율 전환 시 사진이 유지된다", async ({ page }) => {
   const errors = trackErrors(page);
-  await openEditor(page, "frame01");
+  await openEditor(page, "duo");
 
-  await attachPhoto(page, await placementCenter(page, frame01, "post", "left"));
+  await attachPhoto(page, await placementCenter(page, duo, "post", "left"));
   await expect
     .poll(async () => {
       const p = await pixelAt(
         page,
-        await placementCenter(page, frame01, "post", "left"),
+        await placementCenter(page, duo, "post", "left"),
       );
       return p.r - p.g;
     })
@@ -607,7 +615,7 @@ test("비율 전환 시 사진이 유지된다", async ({ page }) => {
     .poll(async () => {
       const p = await pixelAt(
         page,
-        await placementCenter(page, frame01, "story", "left"),
+        await placementCenter(page, duo, "story", "left"),
       );
       return p.r - p.g;
     })
@@ -618,7 +626,7 @@ test("비율 전환 시 사진이 유지된다", async ({ page }) => {
     .poll(async () => {
       const p = await pixelAt(
         page,
-        await placementCenter(page, frame01, "post", "left"),
+        await placementCenter(page, duo, "post", "left"),
       );
       return p.r - p.g;
     })
@@ -629,8 +637,8 @@ test("비율 전환 시 사진이 유지된다", async ({ page }) => {
 test("캔버스 바깥 페이지 영역 탭으로도 선택이 해제된다 (스펙 06)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
   await (
@@ -639,7 +647,7 @@ test("캔버스 바깥 페이지 영역 탭으로도 선택이 해제된다 (스
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
   // 자동 선택 → 고스트 확인
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const probe = frame.at(rect.x - 40, rect.y + rect.height / 2);
   await expect
@@ -664,15 +672,15 @@ test("에디터 진입 시 반대 비율 에셋을 미리 받는다 (사용자 �
     const url = r.url();
     if (url.includes("/frames/")) requested.add(url.split("/frames/")[1]);
   });
-  await openEditor(page, "frame01"); // post로 진입
+  await openEditor(page, "duo"); // post로 진입
 
   // 보이는 post 에셋은 물론, 전환 대비로 story 에셋까지 받아둔다 (전환 시 깜빡임 방지).
-  // frame01은 v2 사각 슬롯이라 마스크 파일이 없다 (스펙 01)
+  // duo은 v2 사각 슬롯이라 마스크 파일이 없다 (스펙 01)
   await expect
     .poll(
       () =>
-        ["frame01/story/base.webp", "frame01/story/overlay.webp"].filter(
-          (asset) => requested.has(asset),
+        ["duo/story/base.webp", "duo/story/overlay.webp"].filter((asset) =>
+          requested.has(asset),
         ).length,
     )
     .toBe(2);
@@ -686,15 +694,15 @@ test("마스크 있는 템플릿은 반대 비율 마스크도 미리 받는다"
     const url = r.url();
     if (url.includes("/frames/")) requested.add(url.split("/frames/")[1]);
   });
-  await openEditor(page, "frame02"); // post로 진입 — frame02는 마스크 슬롯 보유
+  await openEditor(page, "punching"); // post로 진입 — punching는 마스크 슬롯 보유
 
   await expect
     .poll(
       () =>
         [
-          "frame02/story/base.webp",
-          "frame02/story/overlay.webp",
-          "frame02/story/mask-stars.png",
+          "punching/story/base.webp",
+          "punching/story/overlay.webp",
+          "punching/story/mask-stars.png",
         ].filter((asset) => requested.has(asset)).length,
     )
     .toBe(3);
@@ -707,8 +715,8 @@ test("조작 중에만 미리보기 해상도를 낮춘다 (사용자 확정 202
     testInfo.project.name !== "mobile-chrome",
     "DPR이 2보다 큰 프로젝트에서만 차이를 관측할 수 있다",
   );
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   await attachPhoto(page, center); // 자동 선택
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
@@ -736,12 +744,12 @@ test("조작 중에만 미리보기 해상도를 낮춘다 (사용자 확정 202
 test("프레임 좌우 여백 탭으로 선택이 해제된다 (기획 확정 2026-07-29)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   await attachPhoto(page, center); // 자동 선택
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const probe = frame.at(rect.x + 4, rect.y + rect.height / 2);
   await expect
@@ -767,8 +775,8 @@ test("프레임 좌우 여백 탭으로 선택이 해제된다 (기획 확정 20
 test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 표면, 스펙 06)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   // 가로로 긴 redblue → cover 시 좌우로 슬롯 밖 고스트가 넓다
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
@@ -778,7 +786,7 @@ test("슬롯 밖 고스트 영역에서도 드래그가 동작한다 (제스처 
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
   // 슬롯 왼쪽 바깥, 고스트가 실제로 보이는 지점
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const ghostPoint = frame.at(rect.x - 30, rect.y + rect.height / 2);
   await expect
@@ -831,7 +839,7 @@ test("고스트가 프레임 밖으로 넘쳐도 잘리지 않는다 (기획 피
     testInfo.project.name !== "desktop-chrome",
     "프레임 좌우 여백이 있어야 넘침을 관측할 수 있다 — 모바일 뷰포트는 프레임이 폭을 꽉 채운다",
   );
-  await openEditor(page, "frame02");
+  await openEditor(page, "punching");
   await page.getByRole("button", { name: "Story 9:16" }).click();
   const root = page.locator('[data-testid="editor-canvas"]');
   await expect
@@ -839,7 +847,7 @@ test("고스트가 프레임 밖으로 넘쳐도 잘리지 않는다 (기획 피
     .toBeGreaterThan(0);
 
   // 전체 너비 슬롯 — cover 상태에서 사진 바운딩 박스가 프레임 밖으로 나간다
-  const main = frame02.variants.story.placements.find(
+  const main = punching.variants.story.placements.find(
     (p: { slot: string }) => p.slot === "main",
   ).rect;
   const frame = await frameMapper(page);
@@ -864,14 +872,14 @@ test("고스트가 프레임 밖으로 넘쳐도 잘리지 않는다 (기획 피
 test("사진 밖에서 핀치해도 배율이 조정된다 (기획 피드백 2026-07-29)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   await attachPhoto(page, center); // 자동 선택
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
   const before = await ghostBBox(page);
 
   // 사진 바운딩 박스 한참 아래(프레임 여백)에서 두 손가락 벌리기
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const pinch = frame.at(rect.x + rect.width / 2, rect.y + rect.height + 500);
   await twoFingerGesture(page, pinch, { spread: 2.5, turn: 0 });
@@ -888,8 +896,8 @@ test("사진 밖에서 핀치해도 배율이 조정된다 (기획 피드백 202
 test("사진 밖에서 드래그해도 사진이 이동한다 (기획 피드백 2026-07-29)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   // 좌 빨강/우 파랑 사진 — 중앙은 경계색, 이동하면 한쪽 색이 중앙에 온다
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
@@ -899,7 +907,7 @@ test("사진 밖에서 드래그해도 사진이 이동한다 (기획 피드백 
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
   // 사진 바운딩 박스 밖(프레임 우측 여백)에서 드래그를 시작한다
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const outsidePhoto = frame.at(950, rect.y + rect.height / 2);
   await expect
@@ -923,8 +931,8 @@ test("사진 밖에서 드래그해도 사진이 이동한다 (기획 피드백 
 test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유, 스펙 06)", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   // 좌 빨강/우 파랑 사진 — 기본(중앙)은 경계, 오른쪽 드래그로 빨강을 중앙에 둔다
   const chooserPromise = page.waitForEvent("filechooser");
   await page.mouse.click(center.x, center.y);
@@ -950,7 +958,7 @@ test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유,
     .poll(async () => {
       const p = await pixelAt(
         page,
-        await placementCenter(page, frame01, "story", "left"),
+        await placementCenter(page, duo, "story", "left"),
       );
       return p.r - p.b;
     })
@@ -962,7 +970,7 @@ test("편집한 위치가 post↔story 전환에도 유지된다 (초점 공유,
     .poll(async () => {
       const p = await pixelAt(
         page,
-        await placementCenter(page, frame01, "post", "left"),
+        await placementCenter(page, duo, "post", "left"),
       );
       return p.r - p.b;
     })
@@ -976,15 +984,15 @@ test("터치 탭으로 📷 교체·✕ 사진 삭제가 동작한다 (스펙 06
     testInfo.project.name !== "mobile-chrome",
     "실기기 회귀 방지 — 터치 이벤트 경로는 모바일 프로젝트에서 검증",
   );
-  await openEditor(page, "frame01");
-  const center = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const center = await placementCenter(page, duo, "post", "left");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.touchscreen.tap(center.x, center.y);
   await (await chooserPromise).setFiles(FIXTURE); // 자동 선택
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
 
   const buttons = await selectionButtons(page);
-  const { rect } = frame01.variants.post.placements[0];
+  const { rect } = duo.variants.post.placements[0];
   const frame = await frameMapper(page);
   const probe = frame.at(rect.x + 4, rect.y + rect.height / 2);
   await expect
@@ -1019,14 +1027,14 @@ test("터치 탭으로 📷 교체·✕ 사진 삭제가 동작한다 (스펙 06
 test("드래그를 이웃 슬롯 위에서 놓아도 파일 선택창이 열리지 않는다", async ({
   page,
 }) => {
-  await openEditor(page, "frame01");
-  const left = await placementCenter(page, frame01, "post", "left");
+  await openEditor(page, "duo");
+  const left = await placementCenter(page, duo, "post", "left");
   await attachPhoto(page, left);
   await expect
     .poll(async () => (await pixelAt(page, left)).r)
     .toBeGreaterThan(180);
 
-  const right = await placementCenter(page, frame01, "post", "right");
+  const right = await placementCenter(page, duo, "post", "right");
   let chooserOpened = false;
   page.on("filechooser", () => {
     chooserOpened = true;

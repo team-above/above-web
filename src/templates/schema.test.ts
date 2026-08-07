@@ -5,24 +5,24 @@ function validTemplate() {
   const variant = {
     canvas: { width: 1080, height: 1350 },
     assets: {
-      base: "/frames/frame01/post/base.png",
-      overlay: "/frames/frame01/post/overlay.png",
+      base: "/frames/duo/post/base.png",
+      overlay: "/frames/duo/post/overlay.png",
     },
     slots: [{ id: "main", label: "사진" }],
     placements: [
       {
         slot: "main",
         rect: { x: 10, y: 20, width: 300, height: 400 },
-        mask: "/frames/frame01/post/mask-main.png",
+        mask: "/frames/duo/post/mask-main.png",
         fit: "cover",
       },
     ],
   };
   return {
-    id: "frame01",
+    id: "duo",
     name: "Duo",
     order: 1,
-    preview: "/frames/frame01/preview.png",
+    preview: "/frames/duo/preview.png",
     variants: { post: variant, story: structuredClone(variant) },
   };
 }
@@ -30,7 +30,7 @@ function validTemplate() {
 describe("validateTemplate", () => {
   it("올바른 템플릿을 통과시킨다", () => {
     const t = validateTemplate(validTemplate());
-    expect(t.id).toBe("frame01");
+    expect(t.id).toBe("duo");
     expect(t.variants.post.slots).toHaveLength(1);
   });
 
@@ -89,6 +89,15 @@ describe("validateTemplate", () => {
     expect(() => validateTemplate(bad)).toThrow(/mask/);
   });
 
+  it("radius는 0 이상 숫자만 허용한다 (둥근 사각 슬롯)", () => {
+    const t = validTemplate();
+    (t.variants.post.placements[0] as Record<string, unknown>).radius = 24;
+    expect(() => validateTemplate(t)).not.toThrow();
+    const bad = validTemplate();
+    (bad.variants.post.placements[0] as Record<string, unknown>).radius = -1;
+    expect(() => validateTemplate(bad)).toThrow(/radius/);
+  });
+
   it("cover 외의 fit을 거부한다", () => {
     const t = validTemplate();
     t.variants.post.placements[0].fit = "contain";
@@ -112,17 +121,20 @@ describe("validateTemplate", () => {
   });
 
   it("실제 파생 템플릿 JSON 6개가 전부 검증을 통과한다", async () => {
-    const templates = await Promise.all([
-      import("./frame01.json"),
-      import("./frame02.json"),
-      import("./frame03.json"),
-      import("./frame04.json"),
-      import("./frame05.json"),
-      import("./frame06.json"),
-    ]);
+    const ids = [
+      "duo",
+      "punching",
+      "accent",
+      "weeklydump",
+      "doodle",
+      "caption",
+    ];
+    const templates = await Promise.all(
+      ids.map((id) => import(`./${id}.json`)),
+    );
     templates.forEach((mod, i) => {
       const t = validateTemplate(mod.default);
-      expect(t.id).toBe(`frame0${i + 1}`);
+      expect(t.id).toBe(ids[i]);
     });
   });
 

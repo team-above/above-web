@@ -773,6 +773,25 @@ function PlacementNode({
     };
   };
 
+  // 사각·둥근 사각 슬롯(마스크 없음)은 클립으로 사진을 가둔다 — 캐시·합성 불필요.
+  // radius가 있으면 둥근 사각 경로로 클립한다 (스펙 01)
+  const radius = placement.radius ?? 0;
+  const clipProps = needsMask
+    ? {}
+    : radius > 0
+      ? {
+          clipFunc: (ctx: Konva.Context) => {
+            const r = Math.min(radius, rect.width / 2, rect.height / 2);
+            ctx.moveTo(r, 0);
+            ctx.arcTo(rect.width, 0, rect.width, rect.height, r);
+            ctx.arcTo(rect.width, rect.height, 0, rect.height, r);
+            ctx.arcTo(0, rect.height, 0, 0, r);
+            ctx.arcTo(0, 0, rect.width, 0, r);
+            ctx.closePath();
+          },
+        }
+      : { clipX: 0, clipY: 0, clipWidth: rect.width, clipHeight: rect.height };
+
   return (
     <Group
       ref={groupRef}
@@ -782,12 +801,19 @@ function PlacementNode({
       name={SLOT_GROUP_NAME}
       slotWidth={rect.width}
       slotHeight={rect.height}
-      // 사각 슬롯(마스크 없음)은 rect 클립으로 사진을 가둔다 — 캐시·합성 불필요
-      clipX={needsMask ? undefined : 0}
-      clipY={needsMask ? undefined : 0}
-      clipWidth={needsMask ? undefined : rect.width}
-      clipHeight={needsMask ? undefined : rect.height}
+      {...clipProps}
     >
+      {/* 빈 슬롯 자리표시 — base에 굽지 않고 코드가 그린다. 사진이 오면 사라져서
+          투명 배경 사진도 프레임 배경이 그대로 비친다 (스펙 01, 사용자 확정 2026-08-07) */}
+      {!photo && !needsMask && (
+        <Rect
+          width={rect.width}
+          height={rect.height}
+          cornerRadius={radius}
+          fill="#D9D9D9"
+          listening={false}
+        />
+      )}
       {/* 히트 영역 — 별무리처럼 마스크가 희소해도 rect 전체가 탭 대상 (스펙 03) */}
       <Rect
         width={rect.width}

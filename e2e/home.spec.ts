@@ -21,7 +21,7 @@ test("홈에 템플릿 카드 6장이 order 순으로 보인다", async ({ page 
 test("카드를 탭하면 해당 에디터로 이동한다", async ({ page }) => {
   await page.goto("/");
   await page.locator("main ul li a").first().click();
-  await expect(page).toHaveURL(/\/editor\/frame01$/);
+  await expect(page).toHaveURL(/\/editor\/duo$/);
   await expect(page.getByRole("heading", { name: "Duo" })).toBeVisible();
 });
 

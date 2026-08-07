@@ -8,22 +8,39 @@ import { expect, test } from "@playwright/test";
  * 렌더 결과가 시안(base=원본 시안 그대로)과 같음을 보장한다. 데스크톱 프로젝트에서만 실행.
  */
 const TEMPLATE_IDS = [
-  "frame01",
-  "frame02",
-  "frame03",
-  "frame04",
-  "frame05",
-  "frame06",
+  "duo",
+  "punching",
+  "accent",
+  "weeklydump",
+  "doodle",
+  "caption",
 ];
 const VARIANTS = ["post", "story"] as const;
 
-/** 템플릿 JSON에서 base/overlay 에셋 경로를 읽는다 (포맷 변경에 따라오게) */
-function assetPaths(id: string, variant: "post" | "story"): [string, string] {
+interface GrayBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+}
+
+/** 템플릿 JSON에서 base/overlay 경로와 코드 자리표시(마스크 없는 슬롯) 정보를 읽는다 */
+function assetPaths(
+  id: string,
+  variant: "post" | "story",
+): [string, string, GrayBox[], { width: number; height: number }] {
   const template = JSON.parse(
     readFileSync(path.join(__dirname, `../src/templates/${id}.json`), "utf8"),
   );
-  const { base, overlay } = template.variants[variant].assets;
-  return [base, overlay];
+  const v = template.variants[variant];
+  const boxes: GrayBox[] = v.placements
+    .filter((p: { mask?: string }) => !p.mask)
+    .map((p: { rect: GrayBox; radius?: number }) => ({
+      ...p.rect,
+      radius: p.radius ?? 0,
+    }));
+  return [v.assets.base, v.assets.overlay, boxes, v.canvas];
 }
 
 test.beforeEach(({}, testInfo) => {
@@ -49,7 +66,7 @@ for (const id of TEMPLATE_IDS) {
         .poll(
           () =>
             page.evaluate(
-              async ([baseSrc, overlaySrc]) => {
+              async ([baseSrc, overlaySrc, grayBoxes, canvasSize]) => {
                 // 스테이지가 편집 영역 전체를 덮으므로 프레임 영역만 잘라 비교한다 (스펙 06)
                 const root = document.querySelector(
                   '[data-testid="editor-canvas"]',
@@ -92,6 +109,27 @@ for (const id of TEMPLATE_IDS) {
                 off.height = height;
                 const ctx = off.getContext("2d")!;
                 ctx.drawImage(base, 0, 0, width, height);
+                // 렌더러가 그리는 빈 슬롯 자리표시(회색, radius 포함)를 재현한다 (스펙 01)
+                const sx = width / (canvasSize as { width: number }).width;
+                const sy = height / (canvasSize as { height: number }).height;
+                ctx.fillStyle = "#D9D9D9";
+                for (const box of grayBoxes as {
+                  x: number;
+                  y: number;
+                  width: number;
+                  height: number;
+                  radius: number;
+                }[]) {
+                  ctx.beginPath();
+                  ctx.roundRect(
+                    box.x * sx,
+                    box.y * sy,
+                    box.width * sx,
+                    box.height * sy,
+                    box.radius * sx,
+                  );
+                  ctx.fill();
+                }
                 ctx.drawImage(overlay, 0, 0, width, height);
                 const wanted = ctx.getImageData(0, 0, width, height).data;
 
@@ -109,11 +147,16 @@ for (const id of TEMPLATE_IDS) {
                 }
                 return bad / total;
               },
-              assetPaths(id, variant),
+              assetPaths(id, variant) as [
+                string,
+                string,
+                GrayBox[],
+                { width: number; height: number },
+              ],
             ),
           { timeout: 10000 },
         )
-        // 3%: 고대비 스트로크(frame05 낙서)의 서브픽셀 보간 차이 허용치.
+        // 3%: 고대비 스트로크(doodle 낙서)의 서브픽셀 보간 차이 허용치.
         // 레이어 순서·에셋 회귀는 수십% 차이를 내므로 감지력은 유지된다
         .toBeLessThan(0.03);
     });

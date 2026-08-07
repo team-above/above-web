@@ -281,8 +281,68 @@ export function buildSlotMask(
 }
 
 /**
- * 파생 결과 자동 회귀 (스펙 01 수용 기준 4) — base(=sample_gray)와
- * "레이어 아래층 + 회색 rect + overlay" 합성의 픽셀 불일치율을 잰다.
+ * 둥근 사각형 슬롯 검출 — 채움 픽셀 집합이 "bbox + 균일 모서리 반지름"으로 설명되면
+ * 반지름(px)을, 아니면 null을 반환한다. 반지름은 모서리 결손 면적((4−π)r²)에서 역산하고,
+ * 실제 픽셀과 대조해 불일치가 AA 수준(둘레 비례)을 넘으면 기각한다.
+ */
+export function detectCornerRadius(
+  img: RawImage,
+  color: Rgb,
+  region: SlotRegion,
+): number | null {
+  const { bbox, area } = region;
+  const missing = bbox.width * bbox.height - area;
+  if (missing <= 0) return null;
+  const r = Math.sqrt(missing / (4 - Math.PI));
+  // 반지름이 짧은 변의 절반을 넘으면 둥근 사각형 모델이 아니다
+  if (r > Math.min(bbox.width, bbox.height) / 2 + 1) return null;
+  const key = (c: number, x: number) => c === x;
+  const inRounded = (x: number, y: number): boolean => {
+    // bbox 로컬 좌표 (픽셀 중심 기준)
+    const px = x + 0.5;
+    const py = y + 0.5;
+    const cx = Math.max(r, Math.min(bbox.width - r, px));
+    const cy = Math.max(r, Math.min(bbox.height - r, py));
+    return (px - cx) ** 2 + (py - cy) ** 2 <= r * r;
+  };
+  let mismatch = 0;
+  for (let y = 0; y < bbox.height; y++) {
+    for (let x = 0; x < bbox.width; x++) {
+      const o = ((bbox.y + y) * img.width + (bbox.x + x)) * 4;
+      const filled =
+        img.data[o + 3] === 255 &&
+        key(img.data[o], color.r) &&
+        key(img.data[o + 1], color.g) &&
+        key(img.data[o + 2], color.b);
+      if (filled !== inRounded(x, y)) mismatch++;
+    }
+  }
+  // 허용 불일치 = 둘레 1px 밴드(AA) 수준
+  const perimeter = 2 * (bbox.width + bbox.height);
+  return mismatch <= perimeter ? r : null;
+}
+
+/** 채움 마스크(0/1)를 회색 자리표시 이미지로 변환 — 자동 회귀에서 코드 자리표시를 재현 */
+export function fillMaskToGray(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  gray = 217,
+): RawImage {
+  const data = new Uint8Array(width * height * 4);
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] !== 1) continue;
+    const o = i * 4;
+    data[o] = gray;
+    data[o + 1] = gray;
+    data[o + 2] = gray;
+    data[o + 3] = 255;
+  }
+  return { width, height, data };
+}
+
+/**
+ * 파생 결과 자동 회귀 (스펙 01 수용 기준 4) — 두 합성 결과의 픽셀 불일치율을 잰다.
  * 채널 차 tolerance 초과 픽셀의 비율을 반환한다 (가장자리 AA만 있으면 0.5% 미만).
  */
 export function diffRatio(a: RawImage, b: RawImage, tolerance = 8): number {

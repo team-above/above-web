@@ -1,8 +1,8 @@
 {
-  "id": "frame02",
+  "id": "punching",
   "name": "Punching",
   "order": 2,
-  "preview": "/frames/frame02/preview.webp",
+  "preview": "/frames/punching/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame02/post/base.webp",
-        "overlay": "/frames/frame02/post/overlay.webp"
+        "base": "/frames/punching/post/base.webp",
+        "overlay": "/frames/punching/post/overlay.webp"
       },
       "slots": [
         {
@@ -32,7 +32,7 @@
             "width": 1080,
             "height": 675
           },
-          "mask": "/frames/frame02/post/mask-stars.png",
+          "mask": "/frames/punching/post/mask-stars.png",
           "fit": "cover"
         },
         {
@@ -43,7 +43,7 @@
             "width": 1080,
             "height": 675
           },
-          "mask": "/frames/frame02/post/mask-main.png",
+          "mask": "/frames/punching/post/mask-main.png",
           "fit": "cover"
         }
       ]
@@ -54,8 +54,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame02/story/base.webp",
-        "overlay": "/frames/frame02/story/overlay.webp"
+        "base": "/frames/punching/story/base.webp",
+        "overlay": "/frames/punching/story/overlay.webp"
       },
       "slots": [
         {
@@ -76,7 +76,7 @@
             "width": 1080,
             "height": 960
           },
-          "mask": "/frames/frame02/story/mask-stars.png",
+          "mask": "/frames/punching/story/mask-stars.png",
           "fit": "cover"
         },
         {
@@ -87,7 +87,7 @@
             "width": 1080,
             "height": 960
           },
-          "mask": "/frames/frame02/story/mask-main.png",
+          "mask": "/frames/punching/story/mask-main.png",
           "fit": "cover"
         }
       ]

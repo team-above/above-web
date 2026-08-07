@@ -1,8 +1,8 @@
 {
-  "id": "frame05",
+  "id": "doodle",
   "name": "Doodle",
   "order": 5,
-  "preview": "/frames/frame05/preview.webp",
+  "preview": "/frames/doodle/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame05/post/base.webp",
-        "overlay": "/frames/frame05/post/overlay.webp"
+        "base": "/frames/doodle/post/base.webp",
+        "overlay": "/frames/doodle/post/overlay.webp"
       },
       "slots": [
         {
@@ -28,7 +28,7 @@
             "width": 562,
             "height": 748
           },
-          "mask": "/frames/frame05/post/mask-main.png",
+          "mask": "/frames/doodle/post/mask-main.png",
           "fit": "cover"
         }
       ]
@@ -39,8 +39,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame05/story/base.webp",
-        "overlay": "/frames/frame05/story/overlay.webp"
+        "base": "/frames/doodle/story/base.webp",
+        "overlay": "/frames/doodle/story/overlay.webp"
       },
       "slots": [
         {
@@ -57,7 +57,7 @@
             "width": 562,
             "height": 748
           },
-          "mask": "/frames/frame05/story/mask-main.png",
+          "mask": "/frames/doodle/story/mask-main.png",
           "fit": "cover"
         }
       ]

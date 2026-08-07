@@ -1,8 +1,8 @@
 {
-  "id": "frame03",
+  "id": "accent",
   "name": "Accent",
   "order": 3,
-  "preview": "/frames/frame03/preview.webp",
+  "preview": "/frames/accent/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame03/post/base.webp",
-        "overlay": "/frames/frame03/post/overlay.webp"
+        "base": "/frames/accent/post/base.webp",
+        "overlay": "/frames/accent/post/overlay.webp"
       },
       "slots": [
         {
@@ -28,11 +28,10 @@
           "slot": "top",
           "rect": {
             "x": 340,
-            "y": 141,
+            "y": 140,
             "width": 400,
-            "height": 299
+            "height": 300
           },
-          "mask": "/frames/frame03/post/mask-top.png",
           "fit": "cover"
         },
         {
@@ -43,7 +42,6 @@
             "width": 1080,
             "height": 770
           },
-          "mask": "/frames/frame03/post/mask-bottom.png",
           "fit": "cover"
         }
       ]
@@ -54,8 +52,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame03/story/base.webp",
-        "overlay": "/frames/frame03/story/overlay.webp"
+        "base": "/frames/accent/story/base.webp",
+        "overlay": "/frames/accent/story/overlay.webp"
       },
       "slots": [
         {
@@ -72,11 +70,10 @@
           "slot": "top",
           "rect": {
             "x": 340,
-            "y": 141,
+            "y": 140,
             "width": 400,
-            "height": 299
+            "height": 300
           },
-          "mask": "/frames/frame03/story/mask-top.png",
           "fit": "cover"
         },
         {
@@ -87,7 +84,6 @@
             "width": 1080,
             "height": 1340
           },
-          "mask": "/frames/frame03/story/mask-bottom.png",
           "fit": "cover"
         }
       ]

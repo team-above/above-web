@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFillMask,
+  detectCornerRadius,
+  fillMaskToGray,
   buildSlotMask,
   compositeOver,
   diffRatio,
@@ -195,6 +197,62 @@ describe("buildSlotMask", () => {
     expect(alphaAt(1, 1)).toBe(255); // 채움
     expect(alphaAt(0, 1)).toBe(255); // 팽창 1px
     expect(alphaAt(3, 0)).toBe(0); // 바깥
+  });
+});
+
+describe("detectCornerRadius", () => {
+  const RED = { r: 255, g: 0, b: 0 };
+  /** 반지름 r의 둥근 사각형 채움 이미지 생성 */
+  function roundedImage(w: number, h: number, r: number): RawImage {
+    const data = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const px = x + 0.5;
+        const py = y + 0.5;
+        const cx = Math.max(r, Math.min(w - r, px));
+        const cy = Math.max(r, Math.min(h - r, py));
+        if ((px - cx) ** 2 + (py - cy) ** 2 <= r * r) {
+          const o = (y * w + x) * 4;
+          data[o] = 255;
+          data[o + 3] = 255;
+        }
+      }
+    }
+    return { width: w, height: h, data };
+  }
+
+  it("둥근 사각형 채움에서 반지름을 복원한다", () => {
+    const img = roundedImage(60, 40, 8);
+    const [region] = extractSlotRegions(img);
+    const r = detectCornerRadius(img, RED, region);
+    expect(r).not.toBeNull();
+    expect(Math.abs(r! - 8)).toBeLessThan(1.5);
+  });
+
+  it("완전 사각형(결손 없음)은 null", () => {
+    const img = makeImage(["RRR", "RRR"], PALETTE);
+    const [region] = extractSlotRegions(img);
+    expect(detectCornerRadius(img, RED, region)).toBeNull();
+  });
+
+  it("둥근 사각형이 아닌 형상(십자)은 기각한다", () => {
+    // 40×40 십자 — 모서리 결손이 크지만 원호 모양이 아니다
+    const rows = Array.from({ length: 40 }, (_, y) => {
+      const arm = y >= 12 && y < 28;
+      return Array.from({ length: 40 }, (_, x) =>
+        arm || (x >= 12 && x < 28) ? "R" : " ",
+      ).join("");
+    });
+    const img = makeImage(rows, PALETTE);
+    const [region] = extractSlotRegions(img);
+    expect(detectCornerRadius(img, RED, region)).toBeNull();
+  });
+});
+
+describe("fillMaskToGray", () => {
+  it("마스크 픽셀만 불투명 회색이 된다", () => {
+    const gray = fillMaskToGray(new Uint8Array([1, 0]), 2, 1);
+    expect([...gray.data]).toEqual([217, 217, 217, 255, 0, 0, 0, 0]);
   });
 });
 

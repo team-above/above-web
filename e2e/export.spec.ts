@@ -7,7 +7,7 @@ const loadTemplate = (id: string) =>
   JSON.parse(
     readFileSync(path.join(__dirname, `../src/templates/${id}.json`), "utf8"),
   );
-const frame01 = loadTemplate("frame01");
+const duo = loadTemplate("duo");
 const FIXTURE = path.join(__dirname, "fixtures/photo-red.png");
 
 function trackErrors(page: Page): string[] {
@@ -65,7 +65,7 @@ async function attachToSlot(
   variant: "post" | "story",
   slotId: string,
 ) {
-  const placement = frame01.variants[variant].placements.find(
+  const placement = duo.variants[variant].placements.find(
     (p: { slot: string }) => p.slot === slotId,
   );
   const point = await frameAt(
@@ -100,17 +100,17 @@ test("다운로드: 정확한 해상도 PNG + 집계 경유 후 에디터 복귀
   page,
 }) => {
   const errors = trackErrors(page);
-  await openEditor(page, "frame01");
+  await openEditor(page, "duo");
   await attachToSlot(page, "post", "left");
 
   const { download, png } = await downloadPng(page);
-  expect(download.suggestedFilename()).toBe("above-frame01-post.png");
+  expect(download.suggestedFilename()).toBe("above-duo-post.png");
   expect(png.width).toBe(1080);
   expect(png.height).toBe(1350);
 
   // 채운 슬롯 중심 = 빨강, 빈 슬롯 중심 = 자리표시 회색(배지 흰색 아님 — AC2)
-  const left = frame01.variants.post.placements[0].rect;
-  const right = frame01.variants.post.placements[1].rect;
+  const left = duo.variants.post.placements[0].rect;
+  const right = duo.variants.post.placements[1].rect;
   const filled = pixelOf(
     png,
     left.x + Math.floor(left.width / 2),
@@ -127,20 +127,20 @@ test("다운로드: 정확한 해상도 PNG + 집계 경유 후 에디터 복귀
   expect(Math.abs(empty.r - empty.b)).toBeLessThan(12); // 무채색
 
   // 결과 화면 없음(기획 확정): 집계 라우트(done)를 스쳐 에디터로 자동 복귀 + 토스트, 상태 유지
-  await expect(page).toHaveURL(/\/editor\/frame01$/);
+  await expect(page).toHaveURL(/\/editor\/duo$/);
   await expect(page.getByText("저장했어요")).toBeVisible();
   await expect(page.getByRole("button", { name: "다운로드" })).toBeEnabled();
   expect(errors).toEqual([]);
 });
 
 test("story 비율로 내보내면 1080×1920", async ({ page }) => {
-  await openEditor(page, "frame01");
+  await openEditor(page, "duo");
   await attachToSlot(page, "post", "left");
   await page.getByRole("button", { name: "Story 9:16" }).click();
   // 스토리 캔버스(9:16) 로드 완료 대기 — 전환 직후엔 스테이지가 아직 없다
   await waitForStoryFrame(page);
   const { download, png } = await downloadPng(page);
-  expect(download.suggestedFilename()).toBe("above-frame01-story.png");
+  expect(download.suggestedFilename()).toBe("above-duo-story.png");
   expect(png.width).toBe(1080);
   expect(png.height).toBe(1920);
 });
@@ -152,9 +152,9 @@ test("Shift+휠 회전(90° 스냅)이 미리보기와 내보내기에 반영된
     testInfo.project.name !== "desktop-chrome",
     "Shift+휠은 데스크톱 전용 조작",
   );
-  await openEditor(page, "frame01");
+  await openEditor(page, "duo");
   // 좌 빨강/우 파랑 가로 사진 → 90° 회전하면 위 빨강/아래 파랑이 된다
-  const rect = frame01.variants.post.placements[0].rect;
+  const rect = duo.variants.post.placements[0].rect;
   const center = await frameAt(
     page,
     rect.x + rect.width / 2,
@@ -187,7 +187,7 @@ test("Shift+휠 회전(90° 스냅)이 미리보기와 내보내기에 반영된
   await page.getByRole("button", { name: "Story 9:16" }).click();
   await waitForStoryFrame(page);
   const { png: storyPng } = await downloadPng(page);
-  const storyRect = frame01.variants.story.placements[0].rect;
+  const storyRect = duo.variants.story.placements[0].rect;
   const storyTop = pixelOf(
     storyPng,
     storyRect.x + Math.floor(storyRect.width / 2),
@@ -203,11 +203,11 @@ test("Shift+휠 회전(90° 스냅)이 미리보기와 내보내기에 반영된
 });
 
 test("사진이 없으면 다운로드 버튼이 비활성이다", async ({ page }) => {
-  await openEditor(page, "frame01");
+  await openEditor(page, "duo");
   await expect(page.getByRole("button", { name: "다운로드" })).toBeDisabled();
 });
 
 test("편집 없이 done에 직접 접근하면 에디터로 돌려보낸다", async ({ page }) => {
-  await page.goto("/editor/frame01/done");
-  await expect(page).toHaveURL(/\/editor\/frame01$/);
+  await page.goto("/editor/duo/done");
+  await expect(page).toHaveURL(/\/editor\/duo$/);
 });

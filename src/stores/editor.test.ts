@@ -6,15 +6,15 @@ const fakeBitmap = (name: string) =>
 
 describe("editor 스토어", () => {
   beforeEach(() => {
-    useEditorStore.getState().enterTemplate("frame01");
+    useEditorStore.getState().enterTemplate("duo");
   });
 
   it("템플릿 진입 시 초기화되고, 같은 템플릿 재진입은 상태를 유지한다", () => {
     const store = useEditorStore.getState();
     store.setPhoto("left", { bitmap: fakeBitmap("a"), fileName: "a.jpg" });
-    useEditorStore.getState().enterTemplate("frame01"); // 같은 템플릿
+    useEditorStore.getState().enterTemplate("duo"); // 같은 템플릿
     expect(useEditorStore.getState().photos.left).toBeDefined();
-    useEditorStore.getState().enterTemplate("frame02"); // 다른 템플릿
+    useEditorStore.getState().enterTemplate("punching"); // 다른 템플릿
     const next = useEditorStore.getState();
     expect(next.photos).toEqual({});
     expect(next.variant).toBe("post");

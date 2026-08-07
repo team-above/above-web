@@ -1,8 +1,8 @@
 {
-  "id": "frame06",
+  "id": "caption",
   "name": "Caption",
   "order": 6,
-  "preview": "/frames/frame06/preview.webp",
+  "preview": "/frames/caption/preview.webp",
   "variants": {
     "post": {
       "canvas": {
@@ -10,8 +10,8 @@
         "height": 1350
       },
       "assets": {
-        "base": "/frames/frame06/post/base.webp",
-        "overlay": "/frames/frame06/post/overlay.webp"
+        "base": "/frames/caption/post/base.webp",
+        "overlay": "/frames/caption/post/overlay.webp"
       },
       "slots": [
         {
@@ -28,7 +28,7 @@
             "width": 1080,
             "height": 400
           },
-          "mask": "/frames/frame06/post/mask-main.png",
+          "mask": "/frames/caption/post/mask-main.png",
           "fit": "cover"
         }
       ]
@@ -39,8 +39,8 @@
         "height": 1920
       },
       "assets": {
-        "base": "/frames/frame06/story/base.webp",
-        "overlay": "/frames/frame06/story/overlay.webp"
+        "base": "/frames/caption/story/base.webp",
+        "overlay": "/frames/caption/story/overlay.webp"
       },
       "slots": [
         {
@@ -57,7 +57,7 @@
             "width": 1080,
             "height": 500
           },
-          "mask": "/frames/frame06/story/mask-main.png",
+          "mask": "/frames/caption/story/mask-main.png",
           "fit": "cover"
         }
       ]
