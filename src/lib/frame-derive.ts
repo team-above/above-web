@@ -221,7 +221,12 @@ export function compositeOver(bottom: RawImage, top: RawImage): RawImage {
   return { width: bottom.width, height: bottom.height, data };
 }
 
-/** 정수 배율 박스 평균 다운스케일 — 파생 해상도 = 내보내기 규격 (1080 기준) */
+/**
+ * 정수 배율 박스 평균 다운스케일 — 파생 해상도 = 내보내기 규격 (1080 기준).
+ * RGB는 **알파 가중(프리멀티플라이드)** 평균 — 가중 없이 평균하면 불투명 흰 글자와
+ * 투명(RGB 0) 배경이 섞이는 경계에서 어두운 테두리(프린지)가 생긴다
+ * (실기기 제보 2026-08-07: Weekly Dump 요일 라벨 테두리).
+ */
 export function downscaleBy(img: RawImage, factor: number): RawImage {
   if (!Number.isInteger(factor) || factor < 1) {
     throw new Error(`다운스케일 배율은 1 이상 정수여야 함: ${factor}`);
@@ -233,18 +238,26 @@ export function downscaleBy(img: RawImage, factor: number): RawImage {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const o = (y * w + x) * 4;
-      for (let c = 0; c < 4; c++) {
-        let sum = 0;
-        for (let dy = 0; dy < factor; dy++) {
-          for (let dx = 0; dx < factor; dx++) {
-            sum +=
-              img.data[
-                ((y * factor + dy) * img.width + x * factor + dx) * 4 + c
-              ];
-          }
+      let sumR = 0;
+      let sumG = 0;
+      let sumB = 0;
+      let sumA = 0;
+      for (let dy = 0; dy < factor; dy++) {
+        for (let dx = 0; dx < factor; dx++) {
+          const i = ((y * factor + dy) * img.width + x * factor + dx) * 4;
+          const a = img.data[i + 3];
+          sumR += img.data[i] * a;
+          sumG += img.data[i + 1] * a;
+          sumB += img.data[i + 2] * a;
+          sumA += a;
         }
-        out[o + c] = Math.round(sum / n);
       }
+      if (sumA > 0) {
+        out[o] = Math.round(sumR / sumA);
+        out[o + 1] = Math.round(sumG / sumA);
+        out[o + 2] = Math.round(sumB / sumA);
+      }
+      out[o + 3] = Math.round(sumA / n);
     }
   }
   return { width: w, height: h, data: out };

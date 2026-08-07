@@ -182,6 +182,13 @@ describe("downscaleBy", () => {
       /정수여야/,
     );
   });
+
+  it("알파 가중 평균 — 불투명 흰색과 투명 배경의 경계에 어두운 프린지가 생기지 않는다", () => {
+    // W(흰 불투명) 2픽셀 + 투명 2픽셀 → 1픽셀: 색은 흰색 유지, 알파만 절반
+    const img = makeImage(["WW", "  "], { ...PALETTE, W: [255, 255, 255] });
+    const half = downscaleBy(img, 2);
+    expect([...half.data]).toEqual([255, 255, 255, 128]); // 가중 없으면 rgb 128(회색 테두리)
+  });
 });
 
 describe("buildSlotMask", () => {
