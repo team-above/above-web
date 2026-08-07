@@ -276,6 +276,10 @@ export default function EditorCanvas({
       if (!wantUp && !wantFit) continue; // 안정 구간
       // 축소는 반드시 점진 반감(downscaleBitmap) — 단일 패스 리사이즈는 대배율에서
       // 에일리어싱을 낸다 (createImageBitmap resizeQuality: "high"도 마찬가지, 실측 151 vs 33)
+      // 비동기 디코드 중 슬롯 사진이 교체될 수 있다 — 커밋 직전 파일 정체성 확인,
+      // 아니면 낡은 픽셀이 새 사진 메타에 붙는다 (width 가드만으로는 못 막는 race)
+      const isCurrent = () =>
+        useEditorStore.getState().photos[placement.slot]?.file === photo.file;
       try {
         if (wantFit) {
           // 하향: 이미 들고 있는 비트맵에서 줄인다 (파일 재디코드 불필요)
@@ -285,7 +289,11 @@ export default function EditorCanvas({
             target,
             Math.round((target * size.height) / size.width),
           );
-          useEditorStore.getState().fitPhoto(placement.slot, bitmap);
+          if (isCurrent()) {
+            useEditorStore.getState().fitPhoto(placement.slot, bitmap);
+          } else {
+            bitmap.close();
+          }
         } else {
           // 상향: 원본을 통째로 디코드한 뒤 목표까지 점진 축소
           const target = upTarget;
@@ -301,7 +309,11 @@ export default function EditorCanvas({
                   Math.round((target * full.height) / full.width),
                 );
           if (bitmap !== full) full.close();
-          useEditorStore.getState().upgradePhoto(placement.slot, bitmap);
+          if (isCurrent()) {
+            useEditorStore.getState().upgradePhoto(placement.slot, bitmap);
+          } else {
+            bitmap.close();
+          }
         }
       } catch {
         // 재디코딩 실패는 화질만 낮출 뿐 편집을 막지 않는다 — 조용히 넘어간다
@@ -350,11 +362,6 @@ export default function EditorCanvas({
           });
         }
       };
-      recache(EXPORT_PIXEL_RATIO); // 내보내기 래스터 해상도 — 화질 보장
-      layer.clipFunc(undefined); // 미리보기용 라운드 코너는 내보내기에 넣지 않는다
-      layer.position({ x: 0, y: 0 });
-      stage.scale({ x: 1, y: 1 });
-      stage.size(variantData.canvas);
       // 프레임 에셋을 @2x로 잠시 교체 — 1080 에셋 업스케일로 인한 아트 소프트닝 방지.
       // 노드 width/height가 캔버스 좌표로 고정돼 있어 교체해도 레이아웃은 그대로다
       const swaps: Array<[Konva.Image, HTMLImageElement]> = [];
@@ -365,17 +372,26 @@ export default function EditorCanvas({
           node.image(hi);
         }
       };
-      trySwap("base-image", base2x);
-      trySwap("overlay-image", overlay2x);
-      const canvas = layer.toCanvas({ pixelRatio: EXPORT_PIXEL_RATIO });
-      for (const [node, original] of swaps) node.image(original);
-      layer.clipFunc(prev.clipFunc);
-      layer.position(prev.position);
-      stage.scale({ x: prev.scale, y: prev.scale });
-      stage.size({ width: prev.width, height: prev.height });
-      recache(cachePixelRatio); // 미리보기 해상도로 복귀
-      stage.batchDraw();
-      return canvas;
+      // 래스터화가 실패해도(메모리 압박 등) 미리보기가 깨진 채 남지 않도록
+      // 스테이지 복원은 반드시 finally에서 수행한다
+      try {
+        recache(EXPORT_PIXEL_RATIO); // 내보내기 래스터 해상도 — 화질 보장
+        layer.clipFunc(undefined); // 미리보기용 라운드 코너는 내보내기에 넣지 않는다
+        layer.position({ x: 0, y: 0 });
+        stage.scale({ x: 1, y: 1 });
+        stage.size(variantData.canvas);
+        trySwap("base-image", base2x);
+        trySwap("overlay-image", overlay2x);
+        return layer.toCanvas({ pixelRatio: EXPORT_PIXEL_RATIO });
+      } finally {
+        for (const [node, original] of swaps) node.image(original);
+        layer.clipFunc(prev.clipFunc);
+        layer.position(prev.position);
+        stage.scale({ x: prev.scale, y: prev.scale });
+        stage.size({ width: prev.width, height: prev.height });
+        recache(cachePixelRatio); // 미리보기 해상도로 복귀
+        stage.batchDraw();
+      }
     };
     return () => {
       exportRef.current = null;

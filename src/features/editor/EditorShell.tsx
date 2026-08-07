@@ -103,7 +103,14 @@ export function EditorShell({ template }: { template: FrameTemplate }) {
   };
 
   const handleDownload = () => {
-    const canvas = exportRef.current?.();
+    let canvas: HTMLCanvasElement | null;
+    try {
+      canvas = exportRef.current?.() ?? null;
+    } catch {
+      // 래스터화 실패(메모리 압박 등) — 스테이지는 finally로 복원되지만 결과물은 없다
+      setError("이미지를 만들지 못했어요. 다시 시도해 주세요");
+      return;
+    }
     if (!canvas) {
       // 비율 전환 직후 등 에셋 로딩 중 — 무음 실패 방지
       setError("캔버스를 준비하고 있어요. 잠시 후 다시 시도해 주세요");
