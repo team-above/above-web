@@ -13,7 +13,6 @@ const TEMPLATE_IDS = [
   "accent",
   "weeklydump",
   "doodle",
-  "caption",
   "fourleafclover",
 ];
 const VARIANTS = ["post", "story"] as const;

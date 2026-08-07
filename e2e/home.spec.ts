@@ -1,22 +1,21 @@
 import { expect, test } from "@playwright/test";
 
-test("홈에 템플릿 카드 7장이 order 순으로 보인다", async ({ page }) => {
+test("홈에 템플릿 카드 6장이 order 순으로 보인다", async ({ page }) => {
   await page.goto("/");
   const cards = page.locator("main ul li a");
-  await expect(cards).toHaveCount(7);
+  await expect(cards).toHaveCount(6);
   const names = [
     "Duo",
     "Punching",
     "Accent",
     "Weekly Dump",
     "Doodle",
-    "Caption",
     "Fourleafclover",
   ];
   for (const [i, name] of names.entries()) {
     await expect(cards.nth(i)).toContainText(name);
   }
-  await expect(page.getByText("7 frames")).toBeVisible();
+  await expect(page.getByText("6 frames")).toBeVisible();
 });
 
 test("카드를 탭하면 해당 에디터로 이동한다", async ({ page }) => {

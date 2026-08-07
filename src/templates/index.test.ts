@@ -5,11 +5,11 @@ import { getTemplate, loadTemplates, templates } from "./index";
 import { TemplateValidationError } from "./schema";
 
 describe("템플릿 로더", () => {
-  it("7개 템플릿을 order 오름차순으로 제공한다", () => {
-    expect(templates).toHaveLength(7);
-    expect(templates.map((t) => t.order)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  it("6개 템플릿을 order 오름차순으로 제공한다", () => {
+    expect(templates).toHaveLength(6);
+    expect(templates.map((t) => t.order)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(templates[0].id).toBe("duo");
-    expect(templates[6].id).toBe("fourleafclover");
+    expect(templates[5].id).toBe("fourleafclover");
   });
 
   it("모든 템플릿에 미리보기 경로가 있다", () => {

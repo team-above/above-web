@@ -7,7 +7,6 @@ import punching from "./punching.json";
 import accent from "./accent.json";
 import weeklydump from "./weeklydump.json";
 import doodle from "./doodle.json";
-import caption from "./caption.json";
 import fourleafclover from "./fourleafclover.json";
 import { validateTemplate, type FrameTemplate } from "./schema";
 
@@ -22,7 +21,6 @@ export const templates: readonly FrameTemplate[] = loadTemplates([
   accent,
   weeklydump,
   doodle,
-  caption,
   fourleafclover,
 ]);
 

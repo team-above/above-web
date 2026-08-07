@@ -108,7 +108,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   {
     id: "fourleafclover",
     name: "Fourleafclover",
-    order: 7, // 신규 프레임 — caption 거취(라인업 유지 여부) 확정 전까지 뒤에 붙인다
+    order: 6,
     dir: "Fourleafclover",
     slots: [
       { id: "top", label: "위 사진" },
