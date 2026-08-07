@@ -96,7 +96,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   {
     id: "accent",
     name: "Accent",
-    order: 3,
+    order: 4,
     dir: "Accent",
     slots: [
       { id: "top", label: "위 사진" },
@@ -108,7 +108,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   {
     id: "weeklydump",
     name: "Weekly Dump",
-    order: 4,
+    order: 5,
     dir: "Weeklydump",
     // 7칸 각기 다른 색, 읽기 순서 = 윗줄 4칸 → 아랫줄 3칸. 라운드 코너 → radius 검출 대상
     slots: [
@@ -124,7 +124,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   {
     id: "doodle",
     name: "Doodle",
-    order: 5,
+    order: 7,
     dir: "Doodle",
     slots: [{ id: "main", label: "사진" }],
     // layer03(낙서 스트로크)의 진초록(8,90,7)이 채움으로 오인되므로 슬롯 레이어 명시
@@ -133,7 +133,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   {
     id: "mintdot",
     name: "Mintdot",
-    order: 7,
+    order: 6,
     dir: "Mintdot",
     // 캔버스 전체가 슬롯 1칸 — layer01 전면 빨간 채움이 슬롯 선언
     slots: [{ id: "main", label: "사진" }],
@@ -143,7 +143,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   {
     id: "fourleafclover",
     name: "Fourleafclover",
-    order: 6,
+    order: 3,
     dir: "Fourleafclover",
     slots: [
       { id: "top", label: "위 사진" },

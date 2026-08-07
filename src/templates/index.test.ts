@@ -9,7 +9,7 @@ describe("템플릿 로더", () => {
     expect(templates).toHaveLength(7);
     expect(templates.map((t) => t.order)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(templates[0].id).toBe("duo");
-    expect(templates[6].id).toBe("mintdot");
+    expect(templates[6].id).toBe("doodle");
   });
 
   it("모든 템플릿에 미리보기 경로가 있다", () => {

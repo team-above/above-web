@@ -7,11 +7,11 @@ test("홈에 템플릿 카드 7장이 order 순으로 보인다", async ({ page 
   const names = [
     "Duo",
     "Punching",
+    "Fourleafclover",
     "Accent",
     "Weekly Dump",
-    "Doodle",
-    "Fourleafclover",
     "Mintdot",
+    "Doodle",
   ];
   for (const [i, name] of names.entries()) {
     await expect(cards.nth(i)).toContainText(name);

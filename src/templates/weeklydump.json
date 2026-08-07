@@ -1,7 +1,7 @@
 {
   "id": "weeklydump",
   "name": "Weekly Dump",
-  "order": 4,
+  "order": 5,
   "preview": "/frames/weeklydump/preview.webp",
   "variants": {
     "post": {

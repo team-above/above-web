@@ -1,7 +1,7 @@
 {
   "id": "accent",
   "name": "Accent",
-  "order": 3,
+  "order": 4,
   "preview": "/frames/accent/preview.webp",
   "variants": {
     "post": {

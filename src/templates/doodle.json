@@ -1,7 +1,7 @@
 {
   "id": "doodle",
   "name": "Doodle",
-  "order": 5,
+  "order": 7,
   "preview": "/frames/doodle/preview.webp",
   "variants": {
     "post": {
