@@ -14,6 +14,7 @@ const TEMPLATE_IDS = [
   "weeklydump",
   "doodle",
   "caption",
+  "fourleafclover",
 ];
 const VARIANTS = ["post", "story"] as const;
 

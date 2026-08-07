@@ -120,7 +120,7 @@ describe("validateTemplate", () => {
     expect(() => validateTemplate(noOrder)).toThrow(/order/);
   });
 
-  it("실제 파생 템플릿 JSON 6개가 전부 검증을 통과한다", async () => {
+  it("실제 파생 템플릿 JSON 7개가 전부 검증을 통과한다", async () => {
     const ids = [
       "duo",
       "punching",
@@ -128,6 +128,7 @@ describe("validateTemplate", () => {
       "weeklydump",
       "doodle",
       "caption",
+      "fourleafclover",
     ];
     const templates = await Promise.all(
       ids.map((id) => import(`./${id}.json`)),

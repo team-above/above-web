@@ -8,6 +8,7 @@ import accent from "./accent.json";
 import weeklydump from "./weeklydump.json";
 import doodle from "./doodle.json";
 import caption from "./caption.json";
+import fourleafclover from "./fourleafclover.json";
 import { validateTemplate, type FrameTemplate } from "./schema";
 
 /** 원본 JSON 배열을 검증하고 order 오름차순으로 정렬한다. 검증 실패 시 throw */
@@ -22,6 +23,7 @@ export const templates: readonly FrameTemplate[] = loadTemplates([
   weeklydump,
   doodle,
   caption,
+  fourleafclover,
 ]);
 
 export function getTemplate(id: string): FrameTemplate | undefined {

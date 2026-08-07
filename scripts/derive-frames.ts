@@ -105,6 +105,20 @@ const FRAME_CONFIGS: FrameConfig[] = [
     // layer01의 빨강(214,0,0)은 상단 배경색이지 슬롯 채움이 아니다 — layer02가 슬롯 레이어
     slotLayer: 2,
   },
+  {
+    id: "fourleafclover",
+    name: "Fourleafclover",
+    order: 7, // 신규 프레임 — caption 거취(라인업 유지 여부) 확정 전까지 뒤에 붙인다
+    dir: "Fourleafclover",
+    slots: [
+      { id: "top", label: "위 사진" },
+      { id: "bottom", label: "아래 사진" },
+    ],
+    // layer02(네온 클로버 오버레이)가 채움으로 오인되므로 슬롯 레이어 명시
+    slotLayer: 1,
+    // 사용 예시가 규약 명명(_sample.png) 대신 이 이름으로 전달됨 (내용 확인 완료)
+    sampleName: "Fourleafclover_post.png",
+  },
   // 나머지 프레임: 한 프레임씩 확인하며 추가 (기존 v1 산출물은 그대로 유지)
 ];
 

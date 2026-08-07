@@ -1,7 +1,8 @@
 # 01. 템플릿 스키마 (JSON 구조 · 에셋 규약)
 
 - 상태: **Implemented** (v2 레이어 규약 — 2026-08-06)
-- 구현 현황: v2 파생 파이프라인 가동, **한 프레임씩 확인하며 이행 중** (duo·punching·accent 완료). 나머지는 이행 전까지 기존(v1) 파생 산출물을 그대로 사용한다
+- 구현 현황: v2 파생 파이프라인 가동, **한 프레임씩 확인하며 이행 중** (duo·punching·accent·
+  fourleafclover 완료). 나머지는 이행 전까지 기존(v1) 파생 산출물을 그대로 사용한다
 - **템플릿 id = 디자이너가 준 프레임 이름의 소문자 슬러그** (duo, accent, …). 파일·경로·라우트
   전부 동일 슬러그를 쓰고(`src/templates/<id>.json`, `public/frames/<id>/`, `/editor/<id>`),
   홈 노출 순서는 JSON의 `order` 필드가 담당한다 (2026-08-07 사용자 확정 — 번호식 frameNN 폐기)

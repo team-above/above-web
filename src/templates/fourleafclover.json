@@ -1,0 +1,92 @@
+{
+  "id": "fourleafclover",
+  "name": "Fourleafclover",
+  "order": 7,
+  "preview": "/frames/fourleafclover/preview.webp",
+  "variants": {
+    "post": {
+      "canvas": {
+        "width": 1080,
+        "height": 1350
+      },
+      "assets": {
+        "base": "/frames/fourleafclover/post/base.webp",
+        "overlay": "/frames/fourleafclover/post/overlay.webp"
+      },
+      "slots": [
+        {
+          "id": "top",
+          "label": "위 사진"
+        },
+        {
+          "id": "bottom",
+          "label": "아래 사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "top",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 675
+          },
+          "fit": "cover"
+        },
+        {
+          "slot": "bottom",
+          "rect": {
+            "x": 0,
+            "y": 675,
+            "width": 1080,
+            "height": 675
+          },
+          "fit": "cover"
+        }
+      ]
+    },
+    "story": {
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "assets": {
+        "base": "/frames/fourleafclover/story/base.webp",
+        "overlay": "/frames/fourleafclover/story/overlay.webp"
+      },
+      "slots": [
+        {
+          "id": "top",
+          "label": "위 사진"
+        },
+        {
+          "id": "bottom",
+          "label": "아래 사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "top",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 960
+          },
+          "fit": "cover"
+        },
+        {
+          "slot": "bottom",
+          "rect": {
+            "x": 0,
+            "y": 960,
+            "width": 1080,
+            "height": 960
+          },
+          "fit": "cover"
+        }
+      ]
+    }
+  }
+}
