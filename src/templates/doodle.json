@@ -23,12 +23,11 @@
         {
           "slot": "main",
           "rect": {
-            "x": 259,
-            "y": 301,
-            "width": 562,
-            "height": 748
+            "x": 260,
+            "y": 302,
+            "width": 560,
+            "height": 746
           },
-          "mask": "/frames/doodle/post/mask-main.png",
           "fit": "cover"
         }
       ]
@@ -52,12 +51,11 @@
         {
           "slot": "main",
           "rect": {
-            "x": 259,
-            "y": 586,
-            "width": 562,
-            "height": 748
+            "x": 260,
+            "y": 587,
+            "width": 560,
+            "height": 746
           },
-          "mask": "/frames/doodle/story/mask-main.png",
           "fit": "cover"
         }
       ]

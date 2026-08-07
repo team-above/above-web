@@ -106,6 +106,15 @@ const FRAME_CONFIGS: FrameConfig[] = [
     slotLayer: 2,
   },
   {
+    id: "doodle",
+    name: "Doodle",
+    order: 5,
+    dir: "Doodle",
+    slots: [{ id: "main", label: "사진" }],
+    // layer03(낙서 스트로크)의 진초록(8,90,7)이 채움으로 오인되므로 슬롯 레이어 명시
+    slotLayer: 2,
+  },
+  {
     id: "fourleafclover",
     name: "Fourleafclover",
     order: 6,
@@ -116,8 +125,6 @@ const FRAME_CONFIGS: FrameConfig[] = [
     ],
     // layer02(네온 클로버 오버레이)가 채움으로 오인되므로 슬롯 레이어 명시
     slotLayer: 1,
-    // 사용 예시가 규약 명명(_sample.png) 대신 이 이름으로 전달됨 (내용 확인 완료)
-    sampleName: "Fourleafclover_post.png",
   },
   // 나머지 프레임: 한 프레임씩 확인하며 추가 (기존 v1 산출물은 그대로 유지)
 ];
