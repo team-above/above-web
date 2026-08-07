@@ -15,35 +15,33 @@
       },
       "slots": [
         {
-          "id": "stars",
-          "label": "별 사진"
+          "id": "top",
+          "label": "위 사진"
         },
         {
-          "id": "main",
-          "label": "메인 사진"
+          "id": "bottom",
+          "label": "아래 사진"
         }
       ],
       "placements": [
         {
-          "slot": "stars",
+          "slot": "top",
           "rect": {
             "x": 0,
             "y": 0,
             "width": 1080,
             "height": 675
           },
-          "mask": "/frames/punching/post/mask-stars.png",
           "fit": "cover"
         },
         {
-          "slot": "main",
+          "slot": "bottom",
           "rect": {
             "x": 0,
             "y": 675,
             "width": 1080,
             "height": 675
           },
-          "mask": "/frames/punching/post/mask-main.png",
           "fit": "cover"
         }
       ]
@@ -59,35 +57,33 @@
       },
       "slots": [
         {
-          "id": "stars",
-          "label": "별 사진"
+          "id": "top",
+          "label": "위 사진"
         },
         {
-          "id": "main",
-          "label": "메인 사진"
+          "id": "bottom",
+          "label": "아래 사진"
         }
       ],
       "placements": [
         {
-          "slot": "stars",
+          "slot": "top",
           "rect": {
             "x": 0,
             "y": 0,
             "width": 1080,
             "height": 960
           },
-          "mask": "/frames/punching/story/mask-stars.png",
           "fit": "cover"
         },
         {
-          "slot": "main",
+          "slot": "bottom",
           "rect": {
             "x": 0,
             "y": 960,
             "width": 1080,
             "height": 960
           },
-          "mask": "/frames/punching/story/mask-main.png",
           "fit": "cover"
         }
       ]

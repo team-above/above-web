@@ -26,6 +26,7 @@ import {
   eraseMask,
   extractSlotRegions,
   fillMaskToGray,
+  semiTransparentMask,
   type RawImage,
   type SlotRegion,
 } from "../src/lib/frame-derive.ts";
@@ -61,6 +62,10 @@ interface FrameConfig {
    * 배경색이 채움으로 오인되는 경우 여기로 슬롯 레이어를 지정한다
    */
   slotLayer?: number;
+  /** 사용 예시 파일명 오버라이드 (기본 `<dir>_sample.png`) — 명명 편차 수용용 */
+  sampleName?: string;
+  /** sample_gray 파일명 오버라이드 (기본 `<dir>_<변형>_sample_gray.png`) */
+  sampleGrayName?: (variant: VariantId) => string;
 }
 
 const FRAME_CONFIGS: FrameConfig[] = [
@@ -73,6 +78,20 @@ const FRAME_CONFIGS: FrameConfig[] = [
       { id: "left", label: "왼쪽 사진" },
       { id: "right", label: "오른쪽 사진" },
     ],
+  },
+  {
+    id: "punching",
+    name: "Punching",
+    order: 2,
+    dir: "Punching",
+    // v2에서 디자인 교체 (사용자 확인 2026-08-07): 구 main/stars 폐기 —
+    // 상하 반반 2칸, 하늘색 별 오버레이(위 칸은 별 구멍으로 사진이 비침)
+    slots: [
+      { id: "top", label: "위 사진" },
+      { id: "bottom", label: "아래 사진" },
+    ],
+    // layer02(하늘색 별 오버레이)가 채움으로 오인되므로 슬롯 레이어 명시
+    slotLayer: 1,
   },
   {
     id: "accent",
@@ -136,7 +155,8 @@ async function deriveVariant(
   const sampleGrayPath = path.join(
     DESIGN_DIR,
     config.dir,
-    `${config.dir}_${variant}_sample_gray.png`,
+    config.sampleGrayName?.(variant) ??
+      `${config.dir}_${variant}_sample_gray.png`,
   );
   const sampleGray = existsSync(sampleGrayPath)
     ? readPng(sampleGrayPath)
@@ -268,7 +288,14 @@ async function deriveVariant(
       factor,
     );
     const rebuilt = compositeOver(compositeOver(base, grayImg), overlay);
-    const ratio = diffRatio(rebuilt, downscaleBy(sampleGray, factor));
+    // overlay 반투명 가장자리는 합성 순서 차이(디자이너: 원본 해상도 합성 후 축소 vs
+    // 우리: 축소 후 합성)로 잡음이 낀다 — 판정 제외 (오배치는 불투명·투명 영역에서 잡힘)
+    const ratio = diffRatio(
+      rebuilt,
+      downscaleBy(sampleGray, factor),
+      8,
+      semiTransparentMask(overlay),
+    );
     if (ratio > MAX_DIFF_RATIO) {
       throw new Error(
         `${config.id}/${variant}: 합성 회귀 실패 — sample_gray 불일치율 ${(ratio * 100).toFixed(2)}% > ${MAX_DIFF_RATIO * 100}%`,
@@ -307,7 +334,11 @@ async function deriveVariant(
 /** 사용 예시 시안(<dir>_sample.png) → 카드 미리보기 (스펙 02, 고DPR 대응 1080w) */
 async function derivePreview(config: FrameConfig): Promise<string> {
   const sample = readPng(
-    path.join(DESIGN_DIR, config.dir, `${config.dir}_sample.png`),
+    path.join(
+      DESIGN_DIR,
+      config.dir,
+      config.sampleName ?? `${config.dir}_sample.png`,
+    ),
   );
   const factor = sample.width / TARGET_WIDTH;
   if (!Number.isInteger(factor)) {

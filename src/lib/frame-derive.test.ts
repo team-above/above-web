@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFillMask,
+  semiTransparentMask,
   detectCornerRadius,
   fillMaskToGray,
   buildSlotMask,
@@ -270,5 +271,20 @@ describe("diffRatio / fillRects", () => {
     expect(
       diffRatio(makeImage(["k"], PALETTE), makeImage(["kk"], PALETTE)),
     ).toBe(1);
+  });
+
+  it("ignore 마스크 픽셀은 판정·분모에서 뺀다 (합성 순서 잡음 제외)", () => {
+    const a = makeImage(["kk"], PALETTE);
+    const b = makeImage(["Rk"], PALETTE); // 첫 픽셀만 다름
+    expect(diffRatio(a, b)).toBe(0.5);
+    expect(diffRatio(a, b, 8, new Uint8Array([1, 0]))).toBe(0); // 다른 픽셀 제외
+    expect(diffRatio(a, b, 8, new Uint8Array([1, 1]))).toBe(0); // 전부 제외 → 0
+  });
+});
+
+describe("semiTransparentMask", () => {
+  it("0<α<255 픽셀만 1로 표시한다", () => {
+    const img = makeImage([" sR"], PALETTE); // 투명·반투명·불투명
+    expect([...semiTransparentMask(img)]).toEqual([0, 1, 0]);
   });
 });

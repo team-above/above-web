@@ -344,12 +344,21 @@ export function fillMaskToGray(
 /**
  * 파생 결과 자동 회귀 (스펙 01 수용 기준 4) — 두 합성 결과의 픽셀 불일치율을 잰다.
  * 채널 차 tolerance 초과 픽셀의 비율을 반환한다 (가장자리 AA만 있으면 0.5% 미만).
+ * ignore(0/1)가 주어지면 1인 픽셀은 판정·분모에서 뺀다 — overlay 반투명 가장자리처럼
+ * 합성 순서 차이(원본 해상도 합성 후 축소 vs 축소 후 합성)로 잡음이 끼는 픽셀 제외용.
  */
-export function diffRatio(a: RawImage, b: RawImage, tolerance = 8): number {
+export function diffRatio(
+  a: RawImage,
+  b: RawImage,
+  tolerance = 8,
+  ignore?: Uint8Array,
+): number {
   if (a.width !== b.width || a.height !== b.height) return 1;
   let bad = 0;
-  const total = a.width * a.height;
+  let total = 0;
   for (let i = 0; i < a.data.length; i += 4) {
+    if (ignore && ignore[i / 4] === 1) continue;
+    total++;
     if (
       Math.abs(a.data[i] - b.data[i]) > tolerance ||
       Math.abs(a.data[i + 1] - b.data[i + 1]) > tolerance ||
@@ -358,7 +367,17 @@ export function diffRatio(a: RawImage, b: RawImage, tolerance = 8): number {
       bad++;
     }
   }
-  return bad / total;
+  return total === 0 ? 0 : bad / total;
+}
+
+/** 반투명(0<α<255) 픽셀 마스크 — 자동 회귀에서 합성 순서 잡음 제외용 */
+export function semiTransparentMask(img: RawImage): Uint8Array {
+  const mask = new Uint8Array(img.width * img.height);
+  for (let i = 0; i < mask.length; i++) {
+    const a = img.data[i * 4 + 3];
+    if (a > 0 && a < 255) mask[i] = 1;
+  }
+  return mask;
 }
 
 /** 회색 자리표시로 채운 사각형을 그린 사본 — 자동 회귀 합성용 */

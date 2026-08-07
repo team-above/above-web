@@ -184,16 +184,16 @@ test("punching: 파란 별 장식이 사진 위에 남는다 (층 순서)", asyn
   await openEditor(page, "punching");
   await attachPhoto(
     page,
-    await placementCenter(page, punching, "post", "main"),
+    await placementCenter(page, punching, "post", "bottom"),
   );
 
-  const mainRect = punching.variants.post.placements.find(
-    (p: { slot: string }) => p.slot === "main",
+  const bottomRect = punching.variants.post.placements.find(
+    (p: { slot: string }) => p.slot === "bottom",
   ).rect;
   await expect
-    .poll(async () => (await countSlotColors(page, mainRect)).red)
+    .poll(async () => (await countSlotColors(page, bottomRect)).red)
     .toBeGreaterThan(1000);
-  expect((await countSlotColors(page, mainRect)).blue).toBeGreaterThan(100); // 하늘색 별이 사진 위에 남음
+  expect((await countSlotColors(page, bottomRect)).blue).toBeGreaterThan(100); // 하늘색 별이 사진 위에 남음
   expect(errors).toEqual([]);
 });
 
@@ -694,15 +694,15 @@ test("마스크 있는 템플릿은 반대 비율 마스크도 미리 받는다"
     const url = r.url();
     if (url.includes("/frames/")) requested.add(url.split("/frames/")[1]);
   });
-  await openEditor(page, "punching"); // post로 진입 — punching는 마스크 슬롯 보유
+  await openEditor(page, "weeklydump"); // post로 진입 — weeklydump는 마스크 슬롯 보유 (v1)
 
   await expect
     .poll(
       () =>
         [
-          "punching/story/base.webp",
-          "punching/story/overlay.webp",
-          "punching/story/mask-stars.png",
+          "weeklydump/story/base.webp",
+          "weeklydump/story/overlay.webp",
+          "weeklydump/story/mask-mon.png",
         ].filter((asset) => requested.has(asset)).length,
     )
     .toBe(3);
@@ -848,7 +848,7 @@ test("고스트가 프레임 밖으로 넘쳐도 잘리지 않는다 (기획 피
 
   // 전체 너비 슬롯 — cover 상태에서 사진 바운딩 박스가 프레임 밖으로 나간다
   const main = punching.variants.story.placements.find(
-    (p: { slot: string }) => p.slot === "main",
+    (p: { slot: string }) => p.slot === "bottom",
   ).rect;
   const frame = await frameMapper(page);
   const center = frame.at(main.x + main.width / 2, main.y + main.height / 2);
