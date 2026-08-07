@@ -132,7 +132,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   },
   {
     id: "mintdot",
-    name: "Mintdot",
+    name: "Mint Dot",
     order: 6,
     dir: "Mintdot",
     // 캔버스 전체가 슬롯 1칸 — layer01 전면 빨간 채움이 슬롯 선언
@@ -142,7 +142,7 @@ const FRAME_CONFIGS: FrameConfig[] = [
   },
   {
     id: "fourleafclover",
-    name: "Fourleafclover",
+    name: "Four Leaf Clover",
     order: 3,
     dir: "Fourleafclover",
     slots: [

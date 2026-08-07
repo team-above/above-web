@@ -7,10 +7,10 @@ test("홈에 템플릿 카드 7장이 order 순으로 보인다", async ({ page 
   const names = [
     "Duo",
     "Punching",
-    "Fourleafclover",
+    "Four Leaf Clover",
     "Accent",
     "Weekly Dump",
-    "Mintdot",
+    "Mint Dot",
     "Doodle",
   ];
   for (const [i, name] of names.entries()) {
