@@ -106,6 +106,22 @@ const FRAME_CONFIGS: FrameConfig[] = [
     slotLayer: 2,
   },
   {
+    id: "weeklydump",
+    name: "Weekly Dump",
+    order: 4,
+    dir: "Weeklydump",
+    // 7칸 각기 다른 색, 읽기 순서 = 윗줄 4칸 → 아랫줄 3칸. 라운드 코너 → radius 검출 대상
+    slots: [
+      { id: "mon", label: "Mon" },
+      { id: "tue", label: "Tue" },
+      { id: "wed", label: "Wed" },
+      { id: "thu", label: "Thu" },
+      { id: "fri", label: "Fri" },
+      { id: "sat", label: "Sat" },
+      { id: "sun", label: "Sun" },
+    ],
+  },
+  {
     id: "doodle",
     name: "Doodle",
     order: 5,

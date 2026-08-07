@@ -48,77 +48,77 @@
           "slot": "mon",
           "rect": {
             "x": 60,
-            "y": 481,
+            "y": 482,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/post/mask-mon.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "tue",
           "rect": {
             "x": 302,
-            "y": 481,
+            "y": 482,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/post/mask-tue.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "wed",
           "rect": {
             "x": 544,
-            "y": 481,
+            "y": 482,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/post/mask-wed.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "thu",
           "rect": {
             "x": 786,
-            "y": 481,
+            "y": 482,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/post/mask-thu.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "fri",
           "rect": {
             "x": 182,
-            "y": 729,
+            "y": 730,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/post/mask-fri.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "sat",
           "rect": {
             "x": 424,
-            "y": 729,
+            "y": 730,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/post/mask-sat.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "sun",
           "rect": {
             "x": 666,
-            "y": 729,
+            "y": 730,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/post/mask-sun.png",
+          "radius": 30,
           "fit": "cover"
         }
       ]
@@ -167,77 +167,77 @@
           "slot": "mon",
           "rect": {
             "x": 60,
-            "y": 766,
+            "y": 767,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/story/mask-mon.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "tue",
           "rect": {
             "x": 302,
-            "y": 766,
+            "y": 767,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/story/mask-tue.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "wed",
           "rect": {
             "x": 544,
-            "y": 766,
+            "y": 767,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/story/mask-wed.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "thu",
           "rect": {
             "x": 786,
-            "y": 766,
+            "y": 767,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/story/mask-thu.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "fri",
           "rect": {
             "x": 182,
-            "y": 1014,
+            "y": 1015,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/story/mask-fri.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "sat",
           "rect": {
             "x": 424,
-            "y": 1014,
+            "y": 1015,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/story/mask-sat.png",
+          "radius": 30,
           "fit": "cover"
         },
         {
           "slot": "sun",
           "rect": {
             "x": 666,
-            "y": 1014,
+            "y": 1015,
             "width": 232,
-            "height": 233
+            "height": 232
           },
-          "mask": "/frames/weeklydump/story/mask-sun.png",
+          "radius": 30,
           "fit": "cover"
         }
       ]

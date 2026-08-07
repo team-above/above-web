@@ -211,9 +211,11 @@ test("weeklydump: 요일 라벨이 사진 위에 남는다 (층 순서)", async 
   await expect
     .poll(async () => (await countSlotColors(page, monRect)).red)
     .toBeGreaterThan(300);
-  // 라벨 텍스트(흰색)가 사진 위에 남음 — 라벨은 슬롯 상단 영역
+  // 라벨 텍스트(흰색)가 사진 위에 남음 — 라벨은 슬롯 상단 영역.
+  // 빨간 픽스처 위에 흰 픽셀은 라벨뿐이라 존재 자체가 층 순서의 증거다
+  // (v2 라벨은 v1보다 작아 4px 샘플링에서 한 자릿수만 잡힌다)
   const labelArea = { ...monRect, height: Math.round(monRect.height * 0.3) };
-  expect((await countSlotColors(page, labelArea)).white).toBeGreaterThan(10);
+  expect((await countSlotColors(page, labelArea)).white).toBeGreaterThan(2);
   expect(errors).toEqual([]);
 });
 
@@ -684,28 +686,6 @@ test("에디터 진입 시 반대 비율 에셋을 미리 받는다 (사용자 �
         ).length,
     )
     .toBe(2);
-});
-
-test("마스크 있는 템플릿은 반대 비율 마스크도 미리 받는다", async ({
-  page,
-}) => {
-  const requested = new Set<string>();
-  page.on("request", (r) => {
-    const url = r.url();
-    if (url.includes("/frames/")) requested.add(url.split("/frames/")[1]);
-  });
-  await openEditor(page, "weeklydump"); // post로 진입 — weeklydump는 마스크 슬롯 보유 (v1)
-
-  await expect
-    .poll(
-      () =>
-        [
-          "weeklydump/story/base.webp",
-          "weeklydump/story/overlay.webp",
-          "weeklydump/story/mask-mon.png",
-        ].filter((asset) => requested.has(asset)).length,
-    )
-    .toBe(3);
 });
 
 test("조작 중에만 미리보기 해상도를 낮춘다 (사용자 확정 2026-07-29)", async ({
