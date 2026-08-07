@@ -11,7 +11,9 @@
       },
       "assets": {
         "base": "/frames/doodle/post/base.webp",
-        "overlay": "/frames/doodle/post/overlay.webp"
+        "overlay": "/frames/doodle/post/overlay.webp",
+        "base2x": "/frames/doodle/post/base@2x.webp",
+        "overlay2x": "/frames/doodle/post/overlay@2x.webp"
       },
       "slots": [
         {
@@ -39,7 +41,9 @@
       },
       "assets": {
         "base": "/frames/doodle/story/base.webp",
-        "overlay": "/frames/doodle/story/overlay.webp"
+        "overlay": "/frames/doodle/story/overlay.webp",
+        "base2x": "/frames/doodle/story/base@2x.webp",
+        "overlay2x": "/frames/doodle/story/overlay@2x.webp"
       },
       "slots": [
         {

@@ -70,7 +70,7 @@ e2e/            # Playwright 테스트 (editor 플로우·visual 시각 회귀·
 | sample_gray           | 빈 상태 완성본 시안 — 파생 자동 회귀의 QA 기준 (런타임에서 안 씀)                      |
 | 파생(derive)          | 시안 → 런타임 에셋+JSON 변환. `scripts/derive-frames.ts`                               |
 | 배율(factor)          | 시안 가로폭 ÷ 1080 (정수 강제)                                                         |
-| 캔버스 좌표계         | 내보내기 규격(1080폭) 기준 좌표 — placement rect·radius의 단위                         |
+| 캔버스 좌표계         | 1080폭 기준 좌표 — placement rect·radius의 단위. 내보내기 PNG는 2배 래스터(2160폭)     |
 | 초점(focal)           | 슬롯 중심에 오는 사진 픽셀 좌표. 줌·회전과 함께 **비율 간 공유**                       |
 | 고스트                | 슬롯 선택 시 슬롯 밖까지 35% 투명도로 보여주는 사진 전체 미리보기                      |
 | v1 / v2               | 구(크로마키 통짜 PNG) / 현(레이어 분리 시안) 파생 규약 — 스펙 01                       |
@@ -79,7 +79,7 @@ e2e/            # Playwright 테스트 (editor 플로우·visual 시각 회귀·
 
 - **템플릿은 데이터다**: 프레임은 `src/templates/`의 JSON(+에셋)으로 정의한다. 새 템플릿 추가에 컴포넌트 코드를 만들지 않는다.
 - **산출물은 파생으로만**: `src/templates/*.json`과 `public/frames/`는 `scripts/derive-frames.ts`가 생성한다. 손으로 수정하지 말고, 시안(`docs/design/frames/`)이나 파생 스크립트를 고쳐 재파생한다.
-- **내보내기 규격**: Post 1080×1350, Story 1080×1920 (`src/lib/canvas-size.ts`). 미리보기는 이 규격을 스케일만 해서 보여준다.
+- **내보내기 규격**: 좌표계 Post 1080×1350 / Story 1080×1920, PNG는 2배 래스터 2160×2700 / 2160×3840 (`src/lib/canvas-size.ts`). 미리보기는 좌표계를 스케일만 해서 보여준다.
 - **모바일 퍼스트**: 주 타깃은 모바일 브라우저. 데스크톱은 중앙 고정 컬럼(max-w-135).
 - **테스트**: 기능 구현 후 단위 테스트 필수, 커버리지 80% 강제. 캔버스 시각 결과는 Playwright 스크린샷 회귀로 검증.
 - 라우트 폴더마다 해당 화면의 맥락을 담은 CLAUDE.md를 둔다.

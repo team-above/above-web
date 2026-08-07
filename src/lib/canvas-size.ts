@@ -12,6 +12,13 @@ export const EXPORT_SIZES: Record<AspectMode, Size> = {
 };
 
 /**
+ * 내보내기 래스터 배율 (사용자 확정 2026-08-07) — 좌표계는 1080 그대로 두고 PNG만
+ * 2배(2160×2700 / 2160×3840)로 굽는다. 갤러리 확대·재압축에 유리하다.
+ * 사진 공급량(manageSourceResolution)과 @2x 프레임 에셋이 이 배율을 따라간다.
+ */
+export const EXPORT_PIXEL_RATIO = 2;
+
+/**
  * 내보내기 캔버스를 비율 유지한 채 뷰포트 안에 맞추는 스케일과 표시 크기를 계산한다.
  * 에디터 미리보기 스테이지 크기 결정에 사용.
  *

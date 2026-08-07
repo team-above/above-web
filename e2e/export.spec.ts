@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Download, type Page } from "@playwright/test";
+
+// 내보내기 래스터 배율 (스펙 04) — PNG 크기·픽셀 좌표는 템플릿 좌표 × E
+const E = 2;
 import { PNG } from "pngjs";
 
 const loadTemplate = (id: string) =>
@@ -92,7 +95,7 @@ async function downloadPng(page: Page): Promise<{
 }
 
 const pixelOf = (png: PNG, x: number, y: number) => {
-  const idx = (y * png.width + x) * 4;
+  const idx = (y * E * png.width + x * E) * 4; // 템플릿 좌표 → 래스터 좌표
   return { r: png.data[idx], g: png.data[idx + 1], b: png.data[idx + 2] };
 };
 
@@ -105,8 +108,8 @@ test("다운로드: 정확한 해상도 PNG + 집계 경유 후 에디터 복귀
 
   const { download, png } = await downloadPng(page);
   expect(download.suggestedFilename()).toBe("above-duo-post.png");
-  expect(png.width).toBe(1080);
-  expect(png.height).toBe(1350);
+  expect(png.width).toBe(1080 * E);
+  expect(png.height).toBe(1350 * E);
 
   // 채운 슬롯 중심 = 빨강, 빈 슬롯 중심 = 자리표시 회색(배지 흰색 아님 — AC2)
   const left = duo.variants.post.placements[0].rect;
@@ -133,7 +136,7 @@ test("다운로드: 정확한 해상도 PNG + 집계 경유 후 에디터 복귀
   expect(errors).toEqual([]);
 });
 
-test("story 비율로 내보내면 1080×1920", async ({ page }) => {
+test("story 비율로 내보내면 2배 래스터(2160×3840)", async ({ page }) => {
   await openEditor(page, "duo");
   await attachToSlot(page, "post", "left");
   await page.getByRole("button", { name: "Story 9:16" }).click();
@@ -141,8 +144,8 @@ test("story 비율로 내보내면 1080×1920", async ({ page }) => {
   await waitForStoryFrame(page);
   const { download, png } = await downloadPng(page);
   expect(download.suggestedFilename()).toBe("above-duo-story.png");
-  expect(png.width).toBe(1080);
-  expect(png.height).toBe(1920);
+  expect(png.width).toBe(1080 * E);
+  expect(png.height).toBe(1920 * E);
 });
 
 test("Shift+휠 회전(90° 스냅)이 미리보기와 내보내기에 반영된다", async ({

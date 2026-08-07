@@ -11,7 +11,9 @@
       },
       "assets": {
         "base": "/frames/fourleafclover/post/base.webp",
-        "overlay": "/frames/fourleafclover/post/overlay.webp"
+        "overlay": "/frames/fourleafclover/post/overlay.webp",
+        "base2x": "/frames/fourleafclover/post/base@2x.webp",
+        "overlay2x": "/frames/fourleafclover/post/overlay@2x.webp"
       },
       "slots": [
         {
@@ -53,7 +55,9 @@
       },
       "assets": {
         "base": "/frames/fourleafclover/story/base.webp",
-        "overlay": "/frames/fourleafclover/story/overlay.webp"
+        "overlay": "/frames/fourleafclover/story/overlay.webp",
+        "base2x": "/frames/fourleafclover/story/base@2x.webp",
+        "overlay2x": "/frames/fourleafclover/story/overlay@2x.webp"
       },
       "slots": [
         {

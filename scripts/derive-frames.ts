@@ -178,6 +178,20 @@ async function writeWebp(filePath: string, image: RawImage): Promise<void> {
     .toFile(filePath);
 }
 
+/** 전해상도 합성본 → 지정 폭으로 고품질(lanczos) 축소 저장 — 2배 내보내기용 @2x 에셋 */
+async function writeWebpResized(
+  filePath: string,
+  image: RawImage,
+  targetWidth: number,
+): Promise<void> {
+  await sharp(Buffer.from(image.data), {
+    raw: { width: image.width, height: image.height, channels: 4 },
+  })
+    .resize(targetWidth, null, { kernel: "lanczos3" })
+    .webp({ quality: 82 })
+    .toFile(filePath);
+}
+
 /** `<dir>_<variant>_layerNN.png`를 NN 오름차순(아래→위)으로 읽는다 */
 function readLayers(config: FrameConfig, variant: VariantId): RawImage[] {
   const dir = path.join(DESIGN_DIR, config.dir);
@@ -282,6 +296,17 @@ async function deriveVariant(
   mkdirSync(outDir, { recursive: true });
   await writeWebp(path.join(outDir, "base.webp"), base);
   await writeWebp(path.join(outDir, "overlay.webp"), overlay);
+  // 2배 내보내기용 — 시안 전해상도에서 직접 축소해 1080 경유 손실 없음 (스펙 04)
+  await writeWebpResized(
+    path.join(outDir, "base@2x.webp"),
+    baseFull,
+    TARGET_WIDTH * 2,
+  );
+  await writeWebpResized(
+    path.join(outDir, "overlay@2x.webp"),
+    overlayFull,
+    TARGET_WIDTH * 2,
+  );
 
   const placements: TemplatePlacement[] = config.slots.map((slot, i) => {
     const region = regions[i];
@@ -371,6 +396,8 @@ async function deriveVariant(
     assets: {
       base: `/frames/${config.id}/${variant}/base.webp`,
       overlay: `/frames/${config.id}/${variant}/overlay.webp`,
+      base2x: `/frames/${config.id}/${variant}/base@2x.webp`,
+      overlay2x: `/frames/${config.id}/${variant}/overlay@2x.webp`,
     },
     slots: config.slots,
     placements,

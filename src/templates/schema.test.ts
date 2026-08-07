@@ -139,6 +139,16 @@ describe("validateTemplate", () => {
     });
   });
 
+  it("assets.base2x/overlay2x는 선택이며 문자열이어야 한다 (2배 내보내기)", () => {
+    const t = validTemplate();
+    (t.variants.post.assets as Record<string, unknown>).base2x =
+      "/frames/duo/post/base@2x.webp";
+    expect(() => validateTemplate(t)).not.toThrow();
+    const bad = validTemplate();
+    (bad.variants.post.assets as Record<string, unknown>).overlay2x = 123;
+    expect(() => validateTemplate(bad)).toThrow(/overlay2x/);
+  });
+
   it("assets 경로가 없으면 거부한다", () => {
     const t = validTemplate();
     // @ts-expect-error 검증 대상 오류 케이스

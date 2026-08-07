@@ -34,7 +34,13 @@ export interface TemplatePlacement {
 
 export interface TemplateVariant {
   canvas: Size;
-  assets: { base: string; overlay: string };
+  /** base2x/overlay2x = 2배 내보내기용 프레임 에셋 (내보내기 순간에만 교체 사용, 스펙 04) */
+  assets: {
+    base: string;
+    overlay: string;
+    base2x?: string;
+    overlay2x?: string;
+  };
   slots: TemplateSlot[];
   placements: TemplatePlacement[];
 }
@@ -89,6 +95,11 @@ function validateVariant(
     typeof assets.overlay !== "string"
   ) {
     fail(id, `${variantId}.assets 형식 오류 (base/overlay 경로 필요)`);
+  }
+  for (const key of ["base2x", "overlay2x"] as const) {
+    if (assets[key] !== undefined && typeof assets[key] !== "string") {
+      fail(id, `${variantId}.assets.${key}는 경로 문자열이어야 함`);
+    }
   }
   if (!Array.isArray(slots) || slots.length === 0) {
     fail(id, `${variantId}.slots가 비어 있음`);

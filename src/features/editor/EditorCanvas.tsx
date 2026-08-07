@@ -12,7 +12,7 @@ import {
   Rect,
   Stage,
 } from "react-konva";
-import { fitToViewport } from "@/lib/canvas-size";
+import { EXPORT_PIXEL_RATIO, fitToViewport } from "@/lib/canvas-size";
 import { useEditorStore } from "@/stores/editor";
 import type { FrameTemplate, TemplatePlacement } from "@/templates/schema";
 import {
@@ -165,6 +165,10 @@ export default function EditorCanvas({
   const variantData = template.variants[variant];
   const base = useImageElement(variantData.assets.base);
   const overlay = useImageElement(variantData.assets.overlay);
+  // 2배 내보내기용 프레임 에셋 — 미리 받아두고 내보내는 순간에만 교체해 그린다 (스펙 04).
+  // 로드가 안 끝났으면 1080 에셋으로 내보낸다 (우아한 저하)
+  const base2x = useImageElement(variantData.assets.base2x);
+  const overlay2x = useImageElement(variantData.assets.overlay2x);
   const fitted =
     viewport.width > 0 && viewport.height > 0
       ? fitToViewport(variant, viewport)
@@ -255,8 +259,8 @@ export default function EditorCanvas({
         size,
         placement.rect,
       );
-      // 내보내기(템플릿 원본 좌표계)에서 이 사진이 차지할 픽셀 폭
-      const needed = size.width * stored.scale;
+      // 내보내기에서 이 사진이 차지할 픽셀 폭 — 좌표계(1080) × 내보내기 래스터 배율
+      const needed = size.width * stored.scale * EXPORT_PIXEL_RATIO;
       const upTarget = Math.min(
         Math.ceil(needed),
         photo.sourceSize.width,
@@ -346,12 +350,25 @@ export default function EditorCanvas({
           });
         }
       };
-      recache(1); // 원본(템플릿) 해상도 — 내보내기 화질 보장
+      recache(EXPORT_PIXEL_RATIO); // 내보내기 래스터 해상도 — 화질 보장
       layer.clipFunc(undefined); // 미리보기용 라운드 코너는 내보내기에 넣지 않는다
       layer.position({ x: 0, y: 0 });
       stage.scale({ x: 1, y: 1 });
       stage.size(variantData.canvas);
-      const canvas = layer.toCanvas();
+      // 프레임 에셋을 @2x로 잠시 교체 — 1080 에셋 업스케일로 인한 아트 소프트닝 방지.
+      // 노드 width/height가 캔버스 좌표로 고정돼 있어 교체해도 레이아웃은 그대로다
+      const swaps: Array<[Konva.Image, HTMLImageElement]> = [];
+      const trySwap = (name: string, hi: HTMLImageElement | null) => {
+        const node = layer.findOne<Konva.Image>(`.${name}`);
+        if (node && hi) {
+          swaps.push([node, node.image() as HTMLImageElement]);
+          node.image(hi);
+        }
+      };
+      trySwap("base-image", base2x);
+      trySwap("overlay-image", overlay2x);
+      const canvas = layer.toCanvas({ pixelRatio: EXPORT_PIXEL_RATIO });
+      for (const [node, original] of swaps) node.image(original);
       layer.clipFunc(prev.clipFunc);
       layer.position(prev.position);
       stage.scale({ x: prev.scale, y: prev.scale });
@@ -363,7 +380,7 @@ export default function EditorCanvas({
     return () => {
       exportRef.current = null;
     };
-  }, [exportRef, variantData, cachePixelRatio]);
+  }, [exportRef, variantData, cachePixelRatio, base2x, overlay2x]);
 
   return (
     <div
@@ -409,7 +426,12 @@ export default function EditorCanvas({
               >
                 {/* 프레임 배경 — 탭해도 선택은 유지된다 (해제는 사진 재탭 또는
                     캔버스 바깥 페이지 여백 탭, 기획 확정 2026-07-29) */}
-                <KonvaImage image={base} />
+                <KonvaImage
+                  image={base}
+                  name="base-image"
+                  width={variantData.canvas.width}
+                  height={variantData.canvas.height}
+                />
                 {variantData.placements.map((placement) => (
                   <PlacementNode
                     key={placement.slot}
@@ -418,7 +440,15 @@ export default function EditorCanvas({
                     cachePixelRatio={cachePixelRatio}
                   />
                 ))}
-                {overlay && <KonvaImage image={overlay} listening={false} />}
+                {overlay && (
+                  <KonvaImage
+                    image={overlay}
+                    name="overlay-image"
+                    width={variantData.canvas.width}
+                    height={variantData.canvas.height}
+                    listening={false}
+                  />
+                )}
               </Layer>
               {/* UI 레이어 — 내보내기·시각 회귀 비교 대상이 아니다.
                   클립이 없어 프레임 밖으로 넘치는 고스트도 그대로 보인다 */}

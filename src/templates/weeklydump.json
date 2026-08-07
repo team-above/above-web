@@ -11,7 +11,9 @@
       },
       "assets": {
         "base": "/frames/weeklydump/post/base.webp",
-        "overlay": "/frames/weeklydump/post/overlay.webp"
+        "overlay": "/frames/weeklydump/post/overlay.webp",
+        "base2x": "/frames/weeklydump/post/base@2x.webp",
+        "overlay2x": "/frames/weeklydump/post/overlay@2x.webp"
       },
       "slots": [
         {
@@ -130,7 +132,9 @@
       },
       "assets": {
         "base": "/frames/weeklydump/story/base.webp",
-        "overlay": "/frames/weeklydump/story/overlay.webp"
+        "overlay": "/frames/weeklydump/story/overlay.webp",
+        "base2x": "/frames/weeklydump/story/base@2x.webp",
+        "overlay2x": "/frames/weeklydump/story/overlay@2x.webp"
       },
       "slots": [
         {
