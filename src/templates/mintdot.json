@@ -1,0 +1,64 @@
+{
+  "id": "mintdot",
+  "name": "Mintdot",
+  "order": 7,
+  "preview": "/frames/mintdot/preview.webp",
+  "variants": {
+    "post": {
+      "canvas": {
+        "width": 1080,
+        "height": 1350
+      },
+      "assets": {
+        "base": "/frames/mintdot/post/base.webp",
+        "overlay": "/frames/mintdot/post/overlay.webp"
+      },
+      "slots": [
+        {
+          "id": "main",
+          "label": "사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "main",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 1350
+          },
+          "fit": "cover"
+        }
+      ]
+    },
+    "story": {
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "assets": {
+        "base": "/frames/mintdot/story/base.webp",
+        "overlay": "/frames/mintdot/story/overlay.webp"
+      },
+      "slots": [
+        {
+          "id": "main",
+          "label": "사진"
+        }
+      ],
+      "placements": [
+        {
+          "slot": "main",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 1920
+          },
+          "fit": "cover"
+        }
+      ]
+    }
+  }
+}

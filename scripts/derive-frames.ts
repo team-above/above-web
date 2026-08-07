@@ -131,6 +131,16 @@ const FRAME_CONFIGS: FrameConfig[] = [
     slotLayer: 2,
   },
   {
+    id: "mintdot",
+    name: "Mintdot",
+    order: 7,
+    dir: "Mintdot",
+    // 캔버스 전체가 슬롯 1칸 — layer01 전면 빨간 채움이 슬롯 선언
+    slots: [{ id: "main", label: "사진" }],
+    // layer02(민트 도트 오버레이)가 채움으로 오인되므로 슬롯 레이어 명시
+    slotLayer: 1,
+  },
+  {
     id: "fourleafclover",
     name: "Fourleafclover",
     order: 6,

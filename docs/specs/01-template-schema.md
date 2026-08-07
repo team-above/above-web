@@ -1,7 +1,7 @@
 # 01. 템플릿 스키마 (JSON 구조 · 에셋 규약)
 
 - 상태: **Implemented** (v2 레이어 규약 — 2026-08-06)
-- 구현 현황: **전 라인업(6종) v2 이행 완료** (2026-08-07). 마스크 사용 템플릿 없음 —
+- 구현 현황: **전 라인업(7종) v2 이행 완료** (2026-08-07). 마스크 사용 템플릿 없음 —
   전부 rect 또는 rect+radius 클립
 - **템플릿 id = 디자이너가 준 프레임 이름의 소문자 슬러그** (duo, accent, …). 파일·경로·라우트
   전부 동일 슬러그를 쓰고(`src/templates/<id>.json`, `public/frames/<id>/`, `/editor/<id>`),
@@ -134,6 +134,7 @@ v1은 "슬롯을 회색 자리표시로 칠한 통짜 불투명 PNG"에서 크�
 | weeklydump     | 7 (mon~sun)    | 라운드 코너 → radius: 30 검출(마스크 0장). 그라디언트·라벨 = layer03(사진 위) |
 | doodle         | 1 (main)       | 낙서(layer03) = 사진 위. 낙서 진초록이 채움으로 오인 → slotLayer: 2           |
 | fourleafclover | 2 (top/bottom) | 신규 (order 6). slotLayer: 1                                                  |
+| mintdot        | 1 (main)       | 신규 (order 7). 캔버스 전체 1칸 + 민트 도트 오버레이. slotLayer: 1            |
 
 전 라인업 v2 이행 완료 (2026-08-07) — caption(구 frame06)은 라인업 제외로 삭제.
 
